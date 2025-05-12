@@ -4,15 +4,16 @@ import os
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch_ros.actions import Node
-from ament_index_python import get_package_share_directory
-from launch_ros.substitutions import FindPackageShare
+from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     ld = LaunchDescription()
 
     ns = 'drone'
+    pkg_share = get_package_share_directory('drone_sim')
 
     # Node for Drone 1
     world = {'gz_world': 'default'}
@@ -27,10 +28,7 @@ def generate_launch_description():
     # PX4 SITL + Spawn x500_lidar_camera
     gz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('drone_sim'),
-                'gz_sim.launch.py'
-            ])
+            os.path.join(pkg_share, 'launch', 'gz_sim.launch.py')
         ]),
         launch_arguments={
             'gz_ns': ns,
@@ -46,17 +44,12 @@ def generate_launch_description():
     )
 
     # MAVROS
-    file_name = 'drone_px4_pluginlists.yaml'
-    package_share_directory = get_package_share_directory('drone_sim')
-    plugins_file_path = os.path.join(package_share_directory, file_name)
-    file_name = 'drone_px4_config.yaml'
-    config_file_path = os.path.join(package_share_directory, file_name)
+    plugins_file_path = os.path.join(pkg_share, 'mavros', 'drone_px4_pluginlists.yaml')
+    config_file_path = os.path.join(pkg_share, 'mavros', 'drone_px4_config.yaml')
+    
     mavros_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('drone_sim'),
-                'mavros.launch.py'
-            ])
+            os.path.join(pkg_share, 'launch', 'mavros.launch.py')
         ]),
         launch_arguments={
             'mavros_namespace': ns + '/mavros',
@@ -136,9 +129,8 @@ def generate_launch_description():
         executable='rviz2',
         output='screen',
         name='sim_rviz2',
-        arguments=['-d', '/home/user/shared_volume/ros2_ws/src/drone_sim/drone_sim.rviz']
+        arguments=['-d', '/home/user/shared_volume/ros2_ws/src/drone_sim/rviz/drone_sim.rviz']
     )
-
 
     # Add all nodes and launches to the launch description
     ld.add_action(gz_launch)
