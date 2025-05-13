@@ -23,7 +23,6 @@ class RobotTools:
     def __init__(self, node):
         self.node = node
 
-    # Move this function outside create_tools
     def quaternion_to_euler(self, x, y, z, w):
         """Convert quaternion to Euler angles (roll, pitch, yaw)."""
         # Roll (rotation around x-axis)
@@ -544,29 +543,7 @@ class RobotTools:
             result["yaw_degrees"] = math.degrees(yaw)
             
             return result
-
-        
-        def quaternion_to_euler(self, x, y, z, w):
-            """Convert quaternion to Euler angles (roll, pitch, yaw)."""
-            # Roll (rotation around x-axis)
-            sinr_cosp = 2 * (w * x + y * z)
-            cosr_cosp = 1 - 2 * (x * x + y * y)
-            roll = math.atan2(sinr_cosp, cosr_cosp)
-            
-            # Pitch (rotation around y-axis)
-            sinp = 2 * (w * y - z * x)
-            if abs(sinp) >= 1:
-                pitch = math.copysign(math.pi / 2, sinp)  # Use 90 degrees if out of range
-            else:
-                pitch = math.asin(sinp)
-            
-            # Yaw (rotation around z-axis)
-            siny_cosp = 2 * (w * z + x * y)
-            cosy_cosp = 1 - 2 * (y * y + z * z)
-            yaw = math.atan2(siny_cosp, cosy_cosp)
-            
-            return roll, pitch, yaw
-        
+                    
         # Return all drone tools
         return [
             takeoff,
