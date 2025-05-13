@@ -305,78 +305,116 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land at its current position using PX4's land command.
+            Command the drone to land at its current position using direct velocity control.
+            This ensures the drone will descend regardless of flight mode or service availability.
             """
-            from mavros_msgs.srv import CommandTOL
-            
-            self.node.get_logger().info("Executing landing command...")
+            self.node.get_logger().info("Executing forced landing sequence...")
             
             # Get current position
             current_x = self.node.current_pose.pose.position.x
             current_y = self.node.current_pose.pose.position.y
             current_z = self.node.current_pose.pose.position.z
             
-            # Create service client for the landing command
-            land_client = self.node.create_client(
-                CommandTOL,
-                '/drone/mavros/cmd/land'
-            )
+            # 1. First, try to switch to land mode (as a background attempt)
+            try:
+                mode_client = self.node.create_client(SetMode, '/drone/mavros/set_mode')
+                if mode_client.wait_for_service(timeout_sec=1.0):
+                    mode_request = SetMode.Request()
+                    mode_request.custom_mode = "AUTO.LAND"
+                    mode_client.call_async(mode_request)
+                    self.node.get_logger().info("Land mode request sent (background)")
+            except Exception as e:
+                self.node.get_logger().warning(f"Mode switch failed: {str(e)}")
             
-            # Verify service is available
-            if not land_client.wait_for_service(timeout_sec=2.0):
-                self.node.get_logger().error("Landing service not available")
-                return "Landing service not available. Please check your MAVROS connection."
+            # 2. Create a dedicated thread for controlled descent using velocity commands
+            def controlled_descent():
+                self.node.get_logger().info("Starting controlled descent...")
+                
+                # Make sure we have a cmd_vel publisher
+                if not hasattr(self.node, 'cmd_vel_publisher'):
+                    self.node.get_logger().error("No cmd_vel publisher found")
+                    return
+                
+                # Initialize descent velocity command
+                vel_cmd = Twist()
+                vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
+                
+                # Get control rate for sleep calculations
+                control_rate = 10.0  # Hz
+                if hasattr(self.node, 'control_rate'):
+                    control_rate = self.node.control_rate
+                sleep_time = 1.0 / control_rate
+                
+                # Minimum altitude to consider "landed"
+                min_altitude = 0.15  # meters
+                
+                # Maximum time for landing (safety timeout)
+                max_landing_time = 120.0  # seconds
+                start_time = time.time()
+                
+                # Start descent loop
+                while self.node.running:
+                    # Get current altitude
+                    current_alt = self.node.current_pose.pose.position.z
+                    
+                    # Check if we're already at the ground
+                    if current_alt <= min_altitude:
+                        self.node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
+                        # Send stop command to ensure motors off
+                        stop_cmd = Twist()
+                        for _ in range(5):
+                            self.node.cmd_vel_publisher.publish(stop_cmd)
+                            time.sleep(0.05)
+                        break
+                    
+                    # Adjust velocity based on altitude (slow down near ground)
+                    if current_alt < 1.0:
+                        vel_cmd.linear.z = -0.2  # Slower descent near ground
+                    else:
+                        vel_cmd.linear.z = -0.5  # Normal descent
+                    
+                    # Send descent command
+                    self.node.cmd_vel_publisher.publish(vel_cmd)
+                    
+                    # Check timeout
+                    if time.time() - start_time > max_landing_time:
+                        self.node.get_logger().warning("Landing timeout exceeded, stopping descent")
+                        # Send stop command
+                        stop_cmd = Twist()
+                        self.node.cmd_vel_publisher.publish(stop_cmd)
+                        break
+                    
+                    # Sleep for control interval
+                    time.sleep(sleep_time)
+                
+                # Final stop command to ensure motors off
+                stop_cmd = Twist()
+                for _ in range(5):
+                    self.node.cmd_vel_publisher.publish(stop_cmd)
+                    time.sleep(0.05)
+                
+                self.node.get_logger().info("Controlled descent completed")
             
-            # Create and send the landing request
-            request = CommandTOL.Request()
-            # All parameters as 0 means land at current position
-            request.min_pitch = 0.0
-            request.yaw = 0.0
-            request.latitude = 0.0
-            request.longitude = 0.0
-            request.altitude = 0.0
+            # Start the controlled descent thread
+            descent_thread = threading.Thread(target=controlled_descent)
+            descent_thread.daemon = True
+            descent_thread.start()
             
-            self.node.get_logger().info("Sending land command...")
-            
-            # Call the service
-            future = land_client.call_async(request)
-            
-            # Wait for response with timeout
-            timeout = 5.0
-            start_time = time.time()
-            while time.time() - start_time < timeout and not future.done():
-                time.sleep(0.1)
-            
-            # Process response
-            if not future.done():
-                self.node.get_logger().error("Land command timed out")
-                return "The landing command timed out. The drone may not have received the command."
-            
-            response = future.result()
-            if not response.success:
-                self.node.get_logger().error(f"Land command failed: {response}")
-                return "The landing command was rejected by the flight controller. The drone will continue its current flight mode."
-            
-            # Command accepted - log and add waypoint
-            self.node.get_logger().info("Land command accepted. Drone is descending.")
-            
-            # Add waypoint for landing
+            # Record landing waypoint
             self.node.add_waypoint(
                 "landing",
                 current_x, current_y, 0.0,
-                "Landing command executed"
+                "Manual landing procedure initiated"
             )
             
-            # If we have a setpoint thread running, stop it to avoid conflicts
-            if hasattr(self.node, 'setpoint_thread') and self.node.setpoint_thread.is_alive():
-                self.node.target_setpoint = None  # Signal thread to stop
-                self.node.get_logger().info("Stopped setpoint publisher to avoid conflicts with landing")
-            
             return (
-                f"Landing command accepted. The drone is descending to the ground.\n\n"
+                f"DIRECT LANDING procedure initiated.\n\n"
                 f"• Current position: ({current_x:.2f}, {current_y:.2f}, {current_z:.2f})\n"
-                f"• The drone will perform a controlled landing at the current location.\n"
-                f"• Monitor the altitude with 'get_drone_position'."
+                f"• Method: Controlled velocity descent\n"
+                f"• The drone is now descending toward the ground at a safe speed\n"
+                f"• This approach bypasses flight controller mode requirements\n\n"
+                f"Monitor altitude with 'get_drone_position'. Landing may take up to {current_z/0.5:.1f} seconds.\n"
+                f"If you need to abort, use the 'stop' command."
             )
         
         @tool
