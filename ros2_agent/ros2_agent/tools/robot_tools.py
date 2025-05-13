@@ -285,40 +285,158 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land by gradually decreasing altitude.
+            Command the drone to land at its current position.
+            
+            This uses the proper MAVROS landing command, which ensures the drone
+            performs a controlled descent and disarms automatically upon landing.
             """
-            # Check if we have setpoint control initialized
-            if not hasattr(self.node, 'target_setpoint') or not hasattr(self.node, 'setpoint_pub'):
-                return "Setpoint control not initialized. Use takeoff first."
+            from mavros_msgs.srv import CommandTOL, SetMode
+            
+            self.node.get_logger().info("Initiating landing sequence...")
             
             # Get current position
             current_x = self.node.current_pose.pose.position.x
             current_y = self.node.current_pose.pose.position.y
             current_z = self.node.current_pose.pose.position.z
             
-            # Update the setpoint to current position but with altitude of 0
-            self.node.target_setpoint.pose.position.x = current_x
-            self.node.target_setpoint.pose.position.y = current_y
-            self.node.target_setpoint.pose.position.z = 0.1  # Just above ground level
-            
-            self.node.get_logger().info(f"Landing command issued. Descending to ground level from {current_z:.2f}m")
-            
-            # The continuous setpoint publisher thread will automatically use the updated setpoint
-            
-            # Record landing waypoint
-            self.node.add_waypoint(
-                "landing", 
-                current_x, 
-                current_y, 
-                0.0,
-                "Land command issued"
+            # First approach: Try to use the dedicated land command
+            land_client = self.node.create_client(
+                CommandTOL,
+                '/drone/mavros/cmd/land'
             )
             
+            # Check if the landing service is available
+            if land_client.wait_for_service(timeout_sec=1.0):
+                self.node.get_logger().info("Using land command service...")
+                
+                # Create land request
+                request = CommandTOL.Request()
+                request.min_pitch = 0.0
+                request.yaw = 0.0
+                request.latitude = 0.0  # Use current position
+                request.longitude = 0.0  # Use current position
+                request.altitude = 0.0  # Ground level
+                
+                # Send the land command
+                future = land_client.call_async(request)
+                
+                # Wait for result with timeout
+                timeout = 5.0
+                start_time = time.time()
+                while time.time() - start_time < timeout and not future.done():
+                    time.sleep(0.1)
+                
+                if future.done():
+                    result = future.result()
+                    if result.success:
+                        self.node.get_logger().info("Land command accepted")
+                        
+                        # Record landing waypoint
+                        self.node.add_waypoint(
+                            "landing", 
+                            current_x, current_y, 0.0,
+                            "Land command issued"
+                        )
+                        
+                        return (
+                            f"Land command accepted. The drone is descending to land.\n\n"
+                            f"• Current altitude: {current_z:.2f}m\n"
+                            f"• The drone will perform a controlled landing at the current position.\n"
+                            f"• It will automatically disarm upon touchdown.\n\n"
+                            f"Monitor progress with 'get_drone_position'."
+                        )
+                    else:
+                        self.node.get_logger().warn("Land command was rejected")
+                else:
+                    self.node.get_logger().warn("Land command timed out")
+            
+            # Second approach: Try changing mode to AUTO.LAND
+            self.node.get_logger().info("Trying to set AUTO.LAND mode...")
+            
+            mode_client = self.node.create_client(
+                SetMode,
+                '/drone/mavros/set_mode'
+            )
+            
+            if mode_client.wait_for_service(timeout_sec=1.0):
+                # Create mode change request
+                request = SetMode.Request()
+                request.custom_mode = "AUTO.LAND"
+                
+                # Send the mode change request
+                future = mode_client.call_async(request)
+                
+                # Wait for result with timeout
+                timeout = 5.0
+                start_time = time.time()
+                while time.time() - start_time < timeout and not future.done():
+                    time.sleep(0.1)
+                
+                if future.done():
+                    result = future.result()
+                    if result.mode_sent:
+                        self.node.get_logger().info("AUTO.LAND mode set successfully")
+                        
+                        # Record landing waypoint
+                        self.node.add_waypoint(
+                            "landing", 
+                            current_x, current_y, 0.0,
+                            "AUTO.LAND mode set"
+                        )
+                        
+                        return (
+                            f"Landing mode activated. The drone is descending to land.\n\n"
+                            f"• Current altitude: {current_z:.2f}m\n"
+                            f"• Mode: AUTO.LAND\n"
+                            f"• The drone will perform a controlled landing at the current position.\n\n"
+                            f"Monitor progress with 'get_drone_position'."
+                        )
+                    else:
+                        self.node.get_logger().warn("Failed to set AUTO.LAND mode")
+                else:
+                    self.node.get_logger().warn("Set mode request timed out")
+            
+            # Third (fallback) approach: Return to manual mode and let pilot land
+            # This is a final fallback that should work with most flight controllers
+            self.node.get_logger().info("Trying to return to manual control mode...")
+            
+            if mode_client.wait_for_service(timeout_sec=1.0):
+                # Create mode change request to switch to manual mode
+                request = SetMode.Request()
+                request.custom_mode = "MANUAL"  # Or could be "POSCTL" depending on firmware
+                
+                # Send the mode change request
+                future = mode_client.call_async(request)
+                
+                # Wait for result with timeout
+                timeout = 5.0
+                start_time = time.time()
+                while time.time() - start_time < timeout and not future.done():
+                    time.sleep(0.1)
+                
+                if future.done():
+                    result = future.result()
+                    if result.mode_sent:
+                        self.node.get_logger().info("Manual mode set successfully")
+                        
+                        return (
+                            f"WARNING: Could not initiate automatic landing.\n\n"
+                            f"The drone has been switched to manual control mode.\n"
+                            f"Please take manual control to land the drone safely."
+                        )
+                    else:
+                        self.node.get_logger().warn("Failed to set manual mode")
+                else:
+                    self.node.get_logger().warn("Set mode request timed out")
+            
+            # If all approaches failed, inform the user
+            self.node.get_logger().error("All landing approaches failed")
+            
             return (
-                f"Landing command issued. The drone will descend to ground level.\n\n"
-                f"• Current altitude: {current_z:.2f}m\n"
-                f"• Target: ground level\n\n"
-                f"Monitor progress with 'get_drone_position'."
+                f"⚠️ Unable to initiate landing sequence!\n\n"
+                f"All attempted landing methods failed. The drone is still in the previous flight mode.\n\n"
+                f"Please check if the flight controller is responding to commands and try again, "
+                f"or take manual control if necessary."
             )
         
         @tool
