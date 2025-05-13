@@ -305,147 +305,78 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land at its current position.
-            
-            This tries multiple methods to ensure reliable landing.
+            Command the drone to land at its current position using PX4's land command.
             """
-            from mavros_msgs.srv import CommandBool, SetMode, CommandTOL
+            from mavros_msgs.srv import CommandTOL
             
-            self.node.get_logger().info("Initiating landing sequence...")
+            self.node.get_logger().info("Executing landing command...")
             
             # Get current position
             current_x = self.node.current_pose.pose.position.x
             current_y = self.node.current_pose.pose.position.y
             current_z = self.node.current_pose.pose.position.z
             
-            # Approach 1: Try PX4 landing mode
-            mode_client = self.node.create_client(
-                SetMode,
-                '/drone/mavros/set_mode'
+            # Create service client for the landing command
+            land_client = self.node.create_client(
+                CommandTOL,
+                '/drone/mavros/cmd/land'
             )
             
-            landing_initiated = False
+            # Verify service is available
+            if not land_client.wait_for_service(timeout_sec=2.0):
+                self.node.get_logger().error("Landing service not available")
+                return "Landing service not available. Please check your MAVROS connection."
             
-            if mode_client.wait_for_service(timeout_sec=1.0):
-                # Try different landing modes in sequence
-                for mode in ["AUTO.LAND", "LAND", "RTL"]:
-                    if landing_initiated:
-                        break
-                        
-                    self.node.get_logger().info(f"Trying to set {mode} mode...")
-                    
-                    # Create mode change request
-                    request = SetMode.Request()
-                    request.custom_mode = mode
-                    
-                    # Send the mode change request
-                    future = mode_client.call_async(request)
-                    
-                    # Wait for result with timeout
-                    timeout = 3.0
-                    start_time = time.time()
-                    while time.time() - start_time < timeout and not future.done():
-                        time.sleep(0.1)
-                    
-                    if future.done():
-                        result = future.result()
-                        if result.mode_sent:
-                            self.node.get_logger().info(f"{mode} mode set successfully")
-                            landing_initiated = True
-                            
-                            # Record landing waypoint
-                            self.node.add_waypoint(
-                                "landing", 
-                                current_x, current_y, 0.0,
-                                f"{mode} mode set for landing"
-                            )
-                            
-                            return (
-                                f"Landing initiated using {mode} mode.\n\n"
-                                f"• Current altitude: {current_z:.2f}m\n"
-                                f"• The drone will perform a controlled landing.\n"
-                                f"• Monitor progress with 'get_drone_position'."
-                            )
-                        else:
-                            self.node.get_logger().warn(f"Failed to set {mode} mode")
-                    else:
-                        self.node.get_logger().warn(f"Set {mode} mode request timed out")
+            # Create and send the landing request
+            request = CommandTOL.Request()
+            # All parameters as 0 means land at current position
+            request.min_pitch = 0.0
+            request.yaw = 0.0
+            request.latitude = 0.0
+            request.longitude = 0.0
+            request.altitude = 0.0
             
-            # Approach 2: Use setpoint-based landing (gradual descent)
-            if hasattr(self.node, 'target_setpoint') and hasattr(self.node, 'setpoint_pub'):
-                self.node.get_logger().info("Using setpoint-based landing approach...")
-                
-                # Get current position for lateral stability
-                x = self.node.current_pose.pose.position.x
-                y = self.node.current_pose.pose.position.y
-                
-                # Create a landing setpoint (maintain x,y position but descend slowly)
-                self.node.target_setpoint.pose.position.x = x
-                self.node.target_setpoint.pose.position.y = y
-                self.node.target_setpoint.pose.position.z = 0.1  # Low altitude, but not zero to avoid ground effect
-                
-                # Update the setpoint (it will be continuously published by the setpoint thread)
-                self.node.setpoint_pub.publish(self.node.target_setpoint)
-                
-                self.node.get_logger().info(f"Setpoint landing initiated. Descending to ground level from {current_z:.2f}m")
-                
-                # Record landing waypoint
-                self.node.add_waypoint(
-                    "landing", 
-                    x, y, 0.0,
-                    "Setpoint landing initiated"
-                )
-                
-                return (
-                    f"Landing initiated using setpoint descent.\n\n"
-                    f"• Current altitude: {current_z:.2f}m\n"
-                    f"• The drone will maintain position at ({x:.2f}, {y:.2f}) while descending.\n"
-                    f"• Monitor progress with 'get_drone_position'."
-                )
+            self.node.get_logger().info("Sending land command...")
             
-            # Approach 3: Try disarming (last resort)
-            self.node.get_logger().info("Attempting to disarm as last resort...")
+            # Call the service
+            future = land_client.call_async(request)
             
-            arm_client = self.node.create_client(
-                CommandBool,
-                '/drone/mavros/cmd/arming'
+            # Wait for response with timeout
+            timeout = 5.0
+            start_time = time.time()
+            while time.time() - start_time < timeout and not future.done():
+                time.sleep(0.1)
+            
+            # Process response
+            if not future.done():
+                self.node.get_logger().error("Land command timed out")
+                return "The landing command timed out. The drone may not have received the command."
+            
+            response = future.result()
+            if not response.success:
+                self.node.get_logger().error(f"Land command failed: {response}")
+                return "The landing command was rejected by the flight controller. The drone will continue its current flight mode."
+            
+            # Command accepted - log and add waypoint
+            self.node.get_logger().info("Land command accepted. Drone is descending.")
+            
+            # Add waypoint for landing
+            self.node.add_waypoint(
+                "landing",
+                current_x, current_y, 0.0,
+                "Landing command executed"
             )
             
-            if arm_client.wait_for_service(timeout_sec=1.0):
-                # Create disarm request
-                request = CommandBool.Request()
-                request.value = False  # False = disarm
-                
-                # Send the disarm request
-                future = arm_client.call_async(request)
-                
-                # Wait for result with timeout
-                timeout = 3.0
-                start_time = time.time()
-                while time.time() - start_time < timeout and not future.done():
-                    time.sleep(0.1)
-                
-                if future.done():
-                    result = future.result()
-                    if result.success:
-                        self.node.get_logger().info("Disarm command accepted")
-                        
-                        return (
-                            f"Emergency disarm command accepted.\n\n"
-                            f"WARNING: This is a forced disarm and the drone may drop from its current position.\n"
-                            f"• Current altitude: {current_z:.2f}m\n"
-                        )
-                    else:
-                        self.node.get_logger().warn("Disarm command was rejected")
-                else:
-                    self.node.get_logger().warn("Disarm command timed out")
+            # If we have a setpoint thread running, stop it to avoid conflicts
+            if hasattr(self.node, 'setpoint_thread') and self.node.setpoint_thread.is_alive():
+                self.node.target_setpoint = None  # Signal thread to stop
+                self.node.get_logger().info("Stopped setpoint publisher to avoid conflicts with landing")
             
-            # If all approaches failed
             return (
-                f"⚠️ Unable to initiate landing!\n\n"
-                f"All landing methods failed. The drone is still flying at {current_z:.2f}m.\n\n"
-                f"Please try again or take manual control if necessary. If using a simulator,\n"
-                f"ensure landing services and modes are supported by your PX4 configuration."
+                f"Landing command accepted. The drone is descending to the ground.\n\n"
+                f"• Current position: ({current_x:.2f}, {current_y:.2f}, {current_z:.2f})\n"
+                f"• The drone will perform a controlled landing at the current location.\n"
+                f"• Monitor the altitude with 'get_drone_position'."
             )
         
         @tool
