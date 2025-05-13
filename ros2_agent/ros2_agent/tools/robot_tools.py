@@ -64,14 +64,13 @@ class RobotTools:
             def improved_camera_thread():
                 subscription = None
                 window_name = "Drone Camera"
+                # Move last_frame to this scope so both threads can access it
+                last_frame = [None]  # Use list for mutable reference
+                window_open = [True]  # Use list for mutable reference
                 
                 try:
                     # Create a separate thread just for CV2 window updates
-                    window_open = [True]  # Use list for mutable reference
-                    
                     def display_thread_func():
-                        last_frame = [None]  # Use list for mutable reference
-                        
                         while window_open[0] and self.node.camera_active and self.node.running:
                             if last_frame[0] is not None:
                                 try:
