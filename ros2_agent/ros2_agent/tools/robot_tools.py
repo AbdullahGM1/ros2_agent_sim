@@ -13,6 +13,7 @@ from geometry_msgs.msg import Twist, PoseStamped
 from sensor_msgs.msg import Image
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode
+from mavros_msgs.srv import CommandTOL, SetMode
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 
@@ -21,6 +22,29 @@ class RobotTools:
     
     def __init__(self, node):
         self.node = node
+
+    # Move this function outside create_tools
+    def quaternion_to_euler(self, x, y, z, w):
+        """Convert quaternion to Euler angles (roll, pitch, yaw)."""
+        # Roll (rotation around x-axis)
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+        
+        # Pitch (rotation around y-axis)
+        sinp = 2 * (w * y - z * x)
+        if abs(sinp) >= 1:
+            pitch = math.copysign(math.pi / 2, sinp)  # Use 90 degrees if out of range
+        else:
+            pitch = math.asin(sinp)
+        
+        # Yaw (rotation around z-axis)
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        
+        return roll, pitch, yaw
+        
         
     def create_tools(self):
         """Create and return all robot tools."""
@@ -131,9 +155,6 @@ class RobotTools:
             Returns:
                 str: Status message about the takeoff command
             """
-            from mavros_msgs.srv import CommandBool, SetMode
-            from geometry_msgs.msg import PoseStamped
-            import math
             
             # Validate altitude parameter
             if altitude <= 0:
@@ -289,9 +310,7 @@ class RobotTools:
             
             This uses the proper MAVROS landing command, which ensures the drone
             performs a controlled descent and disarms automatically upon landing.
-            """
-            from mavros_msgs.srv import CommandTOL, SetMode
-            
+            """            
             self.node.get_logger().info("Initiating landing sequence...")
             
             # Get current position
@@ -494,6 +513,8 @@ class RobotTools:
                 f"• Estimated flight time: {estimated_time:.1f} seconds\n\n"
                 f"Monitor progress with 'get_drone_position'."
             )
+      
+    
         @tool
         def get_drone_position() -> dict:
             """
@@ -511,7 +532,7 @@ class RobotTools:
             qz = self.node.current_pose.pose.orientation.z
             qw = self.node.current_pose.pose.orientation.w
             
-            # Convert quaternion to Euler angles (roll, pitch, yaw)
+            # Call the quaternion_to_euler method correctly from self
             roll, pitch, yaw = self.quaternion_to_euler(qx, qy, qz, qw)
             
             # Add orientation to the result
@@ -523,6 +544,7 @@ class RobotTools:
             result["yaw_degrees"] = math.degrees(yaw)
             
             return result
+
         
         def quaternion_to_euler(self, x, y, z, w):
             """Convert quaternion to Euler angles (roll, pitch, yaw)."""
@@ -544,9 +566,6 @@ class RobotTools:
             yaw = math.atan2(siny_cosp, cosy_cosp)
             
             return roll, pitch, yaw
-        
-        # Make helper functions accessible to tools
-        self.quaternion_to_euler = quaternion_to_euler
         
         # Return all drone tools
         return [
