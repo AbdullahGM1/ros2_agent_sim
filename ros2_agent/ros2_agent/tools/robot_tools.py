@@ -60,64 +60,135 @@ class RobotTools:
                     return {"message": "Camera is already running. Use 'stop_camera' to stop it first."}
                 self.node.camera_active = True
             
-            # Define simplified camera thread function
-            def simple_camera_thread():
+            # Define improved camera thread function
+            def improved_camera_thread():
                 subscription = None
+                window_name = "Drone Camera"
+                
                 try:
-                    # Create a simple callback
+                    # Create a separate thread just for CV2 window updates
+                    window_open = [True]  # Use list for mutable reference
+                    
+                    def display_thread_func():
+                        last_frame = [None]  # Use list for mutable reference
+                        
+                        while window_open[0] and self.node.camera_active and self.node.running:
+                            if last_frame[0] is not None:
+                                try:
+                                    cv2.imshow(window_name, last_frame[0])
+                                    key = cv2.waitKey(30)  # More reasonable refresh rate
+                                    if key == ord('q'):
+                                        with self.node.camera_lock:
+                                            self.node.camera_active = False
+                                            window_open[0] = False
+                                except Exception as e:
+                                    self.node.get_logger().error(f"Display error: {str(e)}")
+                                    window_open[0] = False
+                            time.sleep(0.03)  # ~30 fps
+                        
+                        # Clean up CV2 resources properly
+                        try:
+                            cv2.destroyWindow(window_name)
+                            cv2.waitKey(1)  # Give time for window to close
+                        except:
+                            pass
+                    
+                    # Start display thread
+                    display_thread = threading.Thread(target=display_thread_func)
+                    display_thread.daemon = True
+                    display_thread.start()
+                    
+                    # Non-blocking callback that just updates the frame buffer
                     def callback(msg):
-                        if not self.node.camera_active:
+                        if not self.node.camera_active or not window_open[0]:
                             return
                             
                         try:
-                            # Convert image and display with minimal additions
+                            # Convert image but don't display in this thread
                             image = self.node.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-                            cv2.imshow("Drone Camera", image)
-                            key = cv2.waitKey(1)
-                            if key == ord('q'):
-                                with self.node.camera_lock:
-                                    self.node.camera_active = False
+                            last_frame[0] = image
                         except Exception as e:
                             self.node.get_logger().error(f"Image processing error: {str(e)}")
                     
-                    # Subscribe to camera topic
+                    # Subscribe to camera topic with QoS
+                    qos = QoSProfile(
+                        reliability=ReliabilityPolicy.BEST_EFFORT,
+                        durability=DurabilityPolicy.VOLATILE,
+                        history=HistoryPolicy.KEEP_LAST,
+                        depth=1
+                    )
+                    
                     subscription = self.node.create_subscription(
                         Image,
                         self.node.camera_topic,
                         callback,
-                        10  # Simple QoS
+                        qos
                     )
                     
-                    # Simple loop - just check if we should keep running
                     self.node.get_logger().info(f"Camera activated. Viewing {self.node.camera_topic}")
-                    while self.node.camera_active and self.node.running:
+                    
+                    # Just wait for signal to stop
+                    while self.node.camera_active and self.node.running and window_open[0]:
                         time.sleep(0.1)
                         
                 except Exception as e:
-                    self.node.get_logger().error(f"Camera error: {str(e)}")
+                    self.node.get_logger().error(f"Camera thread error: {str(e)}")
                     
                 finally:
-                    # Clean up
+                    # Clean up subscription
+                    if subscription:
+                        self.node.destroy_subscription(subscription)
+                    
+                    # Make sure camera is marked as inactive
                     with self.node.camera_lock:
                         self.node.camera_active = False
                         
-                    if subscription:
-                        self.node.destroy_subscription(subscription)
+                    # Wait for display thread
+                    if 'display_thread' in locals() and display_thread.is_alive():
+                        window_open[0] = False
+                        display_thread.join(timeout=1.0)
                         
+                    # Final cleanup of any remaining windows
                     try:
                         cv2.destroyAllWindows()
+                        cv2.waitKey(1)  # Give time for windows to close
                     except:
                         pass
                         
-                    self.node.get_logger().info("Camera stopped")
+                    self.node.get_logger().info("Camera stopped and resources cleaned up")
             
             # Start thread
-            thread = threading.Thread(target=simple_camera_thread)
+            thread = threading.Thread(target=improved_camera_thread)
             thread.daemon = True
             thread.start()
             self.node.camera_thread = thread
             
-            return {"message": "Camera activated. Press 'q' in the camera window to exit."}
+            return {"message": "Camera activated. Press 'q' in the camera window to exit. You can continue using other tools while the camera is active."}
+
+        @tool
+        def stop_camera() -> dict:
+            """
+            Stop the currently running camera stream.
+            """
+            # Check if camera is active
+            with self.node.camera_lock:
+                if not self.node.camera_active:
+                    return {"message": "No active camera to stop."}
+                self.node.camera_active = False
+            
+            # Wait for thread to finish properly
+            if self.node.camera_thread is not None and self.node.camera_thread.is_alive():
+                self.node.camera_thread.join(timeout=2.0)
+            
+            # Ensure any remaining windows are destroyed
+            try:
+                cv2.destroyAllWindows()
+                cv2.waitKey(1)  # Give time for windows to close
+            except:
+                pass
+            
+            self.node.get_logger().info("Camera completely stopped and resources freed")
+            return {"message": "Camera stopped successfully. All resources have been freed."}
 
         @tool
         def stop_camera() -> dict:
@@ -307,8 +378,28 @@ class RobotTools:
             """
             Command the drone to land at its current position using direct velocity control.
             This ensures the drone will descend regardless of flight mode or service availability.
+            Automatically stops the camera if it's running to prevent interference.
             """
             self.node.get_logger().info("Executing forced landing sequence...")
+            
+            # Stop camera if it's running to avoid resource contention
+            with self.node.camera_lock:
+                if self.node.camera_active:
+                    self.node.get_logger().info("Stopping camera before landing...")
+                    self.node.camera_active = False
+                    
+                    # Give camera thread time to clean up
+                    time.sleep(0.5)
+                    
+                    try:
+                        cv2.destroyAllWindows()
+                    except:
+                        pass
+            
+            # Wait for camera thread to join if it exists
+            if self.node.camera_thread is not None and self.node.camera_thread.is_alive():
+                self.node.camera_thread.join(timeout=2.0)
+                self.node.get_logger().info("Camera thread has been terminated")
             
             # Get current position
             current_x = self.node.current_pose.pose.position.x
@@ -411,9 +502,9 @@ class RobotTools:
                 f"DIRECT LANDING procedure initiated.\n\n"
                 f"• Current position: ({current_x:.2f}, {current_y:.2f}, {current_z:.2f})\n"
                 f"• Method: Controlled velocity descent\n"
-                f"• The drone is now descending toward the ground at a safe speed\n"
-                f"• This approach bypasses flight controller mode requirements\n\n"
-                f"Monitor altitude with 'get_drone_position'. Landing may take up to {current_z/0.5:.1f} seconds.\n"
+                f"• Camera: {'Stopped automatically' if hasattr(self.node, 'camera_active') and self.node.camera_active else 'Not active'}\n"
+                f"• The drone is now descending toward the ground at a safe speed\n\n"
+                f"Monitor altitude with 'get_drone_position'. Landing should complete soon.\n"
                 f"If you need to abort, use the 'stop' command."
             )
         
