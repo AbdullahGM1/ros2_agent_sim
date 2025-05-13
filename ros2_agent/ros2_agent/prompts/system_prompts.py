@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 System prompts configuration for Search and Rescue (SAR) multi-robot ROSA Agent.
-This module contains all prompt-related configurations for SAR missions using multiple robot types.
+This module contains all prompt-related configurations for SAR missions.
 """
 
 from rosa.prompts import RobotSystemPrompts

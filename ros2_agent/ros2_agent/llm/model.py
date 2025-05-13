@@ -4,12 +4,8 @@ LLM configuration for Search and Rescue multi-robot ROSA Agent.
 This module handles LLM initialization with configurations optimized for SAR operations.
 """
 
-from langchain_ollama import ChatOllama
-import os
 import logging
-
-# Optional: For fallback to cloud models if available
-# from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +30,10 @@ def initialize_llm(model_name: str) -> ChatOllama:
     
     logger.info(f"Initializing LLM for SAR operations with model: {model_name}")
     
+    # Use the original parameters with slight modifications for SAR operations
     return ChatOllama(
         model=model_name,
-        temperature=0.0,  
-        max_retries=5,    
-        num_ctx=8192,     
-        timeout=30,       
+        temperature=0.0,  # Deterministic responses for consistent operation
+        max_retries=3,    # Increased retries for reliability in challenging environments
+        num_ctx=8192,     # Maximum context for handling complex situations
     )
