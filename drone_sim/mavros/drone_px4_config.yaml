@@ -242,8 +242,8 @@
   ros__parameters:
     fcu.odom_parent_id_des: "drone/odom"    # desired parent frame rotation of the FCU's odometry
     fcu.odom_child_id_des: "drone/base_link"    # desired child frame rotation of the FCU's odometry
-    # frame_id: "drone/odom"
-    # child_frame_id: "drone/base_link"
+    frame_id: "drone/odom"
+    child_frame_id: "drone/base_link"
 
 # px4flow
 /drone/mavros/**/px4flow:
