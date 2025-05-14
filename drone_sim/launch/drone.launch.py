@@ -4,16 +4,15 @@ import os
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
+from ament_index_python import get_package_share_directory
 from launch_ros.substitutions import FindPackageShare
-
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from math import radians
 def generate_launch_description():
     ld = LaunchDescription()
 
     ns = 'drone'
-    pkg_share = get_package_share_directory('drone_sim')
 
     # Node for Drone 1
     world = {'gz_world': 'default'}
@@ -28,7 +27,10 @@ def generate_launch_description():
     # PX4 SITL + Spawn x500_lidar_camera
     gz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(pkg_share, 'launch', 'gz_sim.launch.py')
+            PathJoinSubstitution([
+                FindPackageShare('drone_sim'),
+                'gz_sim.launch.py'
+            ])
         ]),
         launch_arguments={
             'gz_ns': ns,
@@ -44,15 +46,20 @@ def generate_launch_description():
     )
 
     # MAVROS
-    plugins_file_path = os.path.join(pkg_share, 'mavros', 'drone_px4_pluginlists.yaml')
-    config_file_path = os.path.join(pkg_share, 'mavros', 'drone_px4_config.yaml')
-    
+    file_name = 'drone_px4_pluginlists.yaml'
+    package_share_directory = get_package_share_directory('drone_sim')
+    plugins_file_path = os.path.join(package_share_directory, file_name)
+    file_name = 'drone_px4_config.yaml'
+    config_file_path = os.path.join(package_share_directory, file_name)
     mavros_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(pkg_share, 'launch', 'mavros.launch.py')
+            PathJoinSubstitution([
+                FindPackageShare('drone_sim'),
+                'mavros.launch.py'
+            ])
         ]),
         launch_arguments={
-            'mavros_namespace': ns + '/mavros',
+            'mavros_namespace' :ns+'/mavros',
             'tgt_system': '2',
             'fcu_url': 'udp://:14541@127.0.0.1:14558',
             'pluginlists_yaml': plugins_file_path,
@@ -61,6 +68,7 @@ def generate_launch_description():
             'odom_frame': 'drone/odom',
             'map_frame': 'map',
             'use_sim_time' : 'True'
+
         }.items()
     )
 
