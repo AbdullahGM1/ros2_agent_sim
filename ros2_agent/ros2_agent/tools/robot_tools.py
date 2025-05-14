@@ -46,7 +46,7 @@ class RobotTools:
         
     def create_tools(self):
         """Create and return all robot tools."""
-        
+     
         @tool
         def get_drone_camera_image() -> dict:
             """
@@ -188,27 +188,6 @@ class RobotTools:
             self.node.get_logger().info("Camera completely stopped and resources freed")
             return {"message": "Camera stopped successfully. All resources have been freed."}
 
-        @tool
-        def stop_camera() -> dict:
-            """
-            Stop the currently running camera stream.
-            """
-            # Check if camera is active
-            with self.node.camera_lock:
-                if not self.node.camera_active:
-                    return {"message": "No active camera to stop."}
-                self.node.camera_active = False
-            
-            # Wait briefly for thread to notice
-            time.sleep(0.2)
-            
-            # Destroy any windows
-            try:
-                cv2.destroyAllWindows()
-            except:
-                pass
-            
-            return {"message": "Camera stopped."}
         
         @tool
         def takeoff(altitude: float = 5.0) -> str:
