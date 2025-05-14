@@ -59,7 +59,8 @@ def generate_launch_description():
             'config_yaml': config_file_path,
             'base_link_frame': 'drone/base_link',
             'odom_frame': 'drone/odom',
-            'map_frame': 'map'
+            'map_frame': 'map',
+            'use_sim_time' : 'True'
         }.items()
     )
 
