@@ -56,8 +56,8 @@
     use_relative_alt: true    # use relative altitude for local coordinates
     tf.send: false               # send TF?
     tf.frame_id: "map"  # TF frame_id
-    tf.global_frame_id: "earth"  # TF earth frame_id
     tf.child_frame_id: "drone/base_link" # TF child_frame_id
+    tf.global_frame_id: "earth"  # TF earth frame_id
 
 # imu_pub
 /drone/mavros/**/imu:
@@ -242,6 +242,8 @@
   ros__parameters:
     fcu.odom_parent_id_des: "drone/odom"    # desired parent frame rotation of the FCU's odometry
     fcu.odom_child_id_des: "drone/base_link"    # desired child frame rotation of the FCU's odometry
+    frame_id: "drone/odom"
+    child_frame_id: "drone/base_link"
 
 # px4flow
 /drone/mavros/**/px4flow:
