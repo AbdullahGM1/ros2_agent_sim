@@ -103,14 +103,6 @@ def generate_launch_description():
         arguments=[str(lidar_x), str(lidar_y), str(lidar_z), str(lidar_yaw), str(lidar_pitch), str(lidar_roll), ns + '/' + base_link_frame, 'x500_lidar_camera_1/lidar_link/gpu_lidar'],
     )
 
-    # Static TF for ENU to NED conversion (base_link to base_link_frd)
-    enu_to_ned_tf_node = Node(
-        package='tf2_ros',
-        name=ns + '_base_to_frd_tf_node',
-        executable='static_transform_publisher',
-        arguments=['0', '0', '0', '1.5708', '0', '3.1415', ns + '/base_link', 'base_link_frd'],
-    )
-
     # ROS-GZ Bridge
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
@@ -147,7 +139,6 @@ def generate_launch_description():
     ld.add_action(lidar_tf_node)
     ld.add_action(ros_gz_bridge)
     ld.add_action(mavros_launch)
-    ld.add_action(enu_to_ned_tf_node)
     ld.add_action(rviz_node)
 
     return ld
