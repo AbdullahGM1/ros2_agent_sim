@@ -1,4 +1,4 @@
-/observer/mavros/**:
+/drone/mavros/**:
   ros__parameters:
     plugin_denylist:
       # common
