@@ -1,11 +1,11 @@
 # Common configuration for PX4 autopilot
 #
-/observer/mavros/**:
+/drone/mavros/**:
   ros__parameters:
     startup_px4_usb_quirk: false
 
 # sys_status & sys_time connection options
-/observer/mavros/**/conn:
+/drone/mavros/**/conn:
     ros__parameters:
       heartbeat_rate: 1.0    # send heartbeat rate in Hertz
       timeout: 10.0          # heartbeat timeout in seconds
@@ -13,13 +13,13 @@
       system_time_rate: 1.0  # send system time to FCU rate in Hertz (disabled if 0.0)
 
 # sys_status
-/observer/mavros/**/sys:
+/drone/mavros/**/sys:
   ros__parameters:
     min_voltage: [10.0]   # diagnostics min voltage, use a vector i.e. [16.2, 16.0] for multiple batteries, up-to 10 are supported to achieve the same on a ROS launch file do: <rosparam param="sys/min_voltage">[16.2, 16.0]</rosparam>
     disable_diag: false # disable all sys_status diagnostics, except heartbeat
 
 # sys_time
-/observer/mavros/**/time:
+/drone/mavros/**/time:
   ros__parameters:
     time_ref_source: fcu  # time_reference source
     timesync_mode: MAVLINK
@@ -28,7 +28,7 @@
 # --- mavros plugins (alphabetical order) ---
 
 # 3dr_radio
-/observer/mavros/**/tdr_radio:
+/drone/mavros/**/tdr_radio:
   ros__parameters:
     low_rssi: 40  # raw rssi lower level for diagnostics
 
@@ -36,7 +36,7 @@
 # None
 
 # command
-/observer/mavros/**/cmd:
+/drone/mavros/**/cmd:
   ros__parameters:
     use_comp_id_system_control: false # quirk for some old FCUs
 
@@ -47,22 +47,22 @@
 # None
 
 # global_position
-/observer/mavros/**/global_position:
+/drone/mavros/**/global_position:
   ros__parameters:
     frame_id: "map"             # origin frame
-    child_frame_id: "observer/base_link" # body-fixed frame
+    child_frame_id: "drone/base_link" # body-fixed frame
     rot_covariance: 99999.0   # covariance for attitude?
     gps_uere: 1.0             # User Equivalent Range Error (UERE) of GPS sensor (m)
     use_relative_alt: true    # use relative altitude for local coordinates
     tf.send: false               # send TF?
     tf.frame_id: "map"  # TF frame_id
     tf.global_frame_id: "earth"  # TF earth frame_id
-    tf.child_frame_id: "observer/base_link" # TF child_frame_id
+    tf.child_frame_id: "drone/base_link" # TF child_frame_id
 
 # imu_pub
-/observer/mavros/**/imu:
+/drone/mavros/**/imu:
   ros__parameters:
-    frame_id: "observer/base_link"
+    frame_id: "drone/base_link"
     # need find actual values
     linear_acceleration_stdev: 0.0003
     angular_velocity_stdev: 0.0003490659 # 0.02 degrees
@@ -70,12 +70,12 @@
     magnetic_stdev: 0.0
 
 # local_position
-/observer/mavros/**/local_position:
+/drone/mavros/**/local_position:
   ros__parameters:
-    frame_id: "observer/odom"
+    frame_id: "drone/odom"
     tf.send: true
-    tf.frame_id: "observer/odom"
-    tf.child_frame_id: "observer/base_link"
+    tf.frame_id: "drone/odom"
+    tf.child_frame_id: "drone/base_link"
     tf.send_fcu: false
 
 # param
@@ -85,12 +85,12 @@
 # None
 
 # setpoint_accel
-/observer/mavros/**/setpoint_accel:
+/drone/mavros/**/setpoint_accel:
   ros__parameters:
     send_force: false
 
 # setpoint_attitude
-/observer/mavros/**/setpoint_attitude:
+/drone/mavros/**/setpoint_attitude:
   ros__parameters:
     reverse_thrust: false     # allow reversed thrust
     use_quaternion: false     # enable PoseStamped topic subscriber
@@ -99,14 +99,14 @@
     tf.child_frame_id: "target_attitude"
     tf.rate_limit: 50.0
 
-/observer/mavros/**/setpoint_raw:
+/drone/mavros/**/setpoint_raw:
   ros__parameters:
     thrust_scaling: 1.0       # used in setpoint_raw attitude callback.
     # Note: PX4 expects normalized thrust values between 0 and 1, which means that
     # the scaling needs to be unitary and the inputs should be 0..1 as well.
 
 # setpoint_position
-/observer/mavros/**/setpoint_position:
+/drone/mavros/**/setpoint_position:
   ros__parameters:
     tf.listen: false           # enable tf listener (disable topic subscribers)
     tf.frame_id: "map"
@@ -115,7 +115,7 @@
     mav_frame: LOCAL_NED
 
 # setpoint_velocity
-/observer/mavros/**/setpoint_velocity:
+/drone/mavros/**/setpoint_velocity:
   ros__parameters:
     mav_frame: LOCAL_NED
 
@@ -123,7 +123,7 @@
 # None
 
 # waypoint
-/observer/mavros/**/mission:
+/drone/mavros/**/mission:
   ros__parameters:
     pull_after_gcs: true  # update mission if gcs updates
     use_mission_item_int: true # use the MISSION_ITEM_INT message instead of MISSION_ITEM
@@ -142,7 +142,7 @@
 ## Currently available orientations:
 #    Check http://wiki.ros.org/mavros/**/Enumerations
 ##
-/observer/mavros/**/distance_sensor:
+/drone/mavros/**/distance_sensor:
   ros__parameters:
     config: |
       hrlv_ez4_pub:
@@ -175,13 +175,13 @@
         orientation: PITCH_270
 
 # image_pub
-/observer/mavros/**/image:
+/drone/mavros/**/image:
   ros__parameters:
     frame_id: "px4flow"
 
 
 # fake_gps
-/observer/mavros/**/fake_gps:
+/drone/mavros/**/fake_gps:
   ros__parameters:
     # select data source
     use_mocap: true         # ~mocap/pose
@@ -204,7 +204,7 @@
 
 
 # landing_target
-/observer/mavros/**/landing_target:
+/drone/mavros/**/landing_target:
   ros__parameters:
     listen_lt: false
     mav_frame: "LOCAL_NED"
@@ -222,14 +222,14 @@
 
 
 # mocap_pose_estimate
-/observer/mavros/**/mocap:
+/drone/mavros/**/mocap:
   ros__parameters:
     # select mocap source
     use_tf: false   # ~mocap/tf
     use_pose: true  # ~mocap/pose
 
 # mount_control
-/observer/mavros/**/mount:
+/drone/mavros/**/mount:
   ros__parameters:
     debounce_s: 4.0
     err_threshold_deg: 10.0
@@ -238,13 +238,13 @@
     negate_measured_yaw: false
 
 # odom
-/observer/mavros/**/odometry:
+/drone/mavros/**/odometry:
   ros__parameters:
-    fcu.odom_parent_id_des: "observer/odom"    # desired parent frame rotation of the FCU's odometry
-    fcu.odom_child_id_des: "observer/base_link"    # desired child frame rotation of the FCU's odometry
+    fcu.odom_parent_id_des: "drone/odom"    # desired parent frame rotation of the FCU's odometry
+    fcu.odom_child_id_des: "drone/base_link"    # desired child frame rotation of the FCU's odometry
 
 # px4flow
-/observer/mavros/**/px4flow:
+/drone/mavros/**/px4flow:
   ros__parameters:
     frame_id: "px4flow"
     ranger_fov: 0.118682      # 6.8 degrees at 5 meters, 31 degrees at 1 meter
@@ -252,7 +252,7 @@
     ranger_max_range: 5.0     # meters
 
 # vision_pose_estimate
-/observer/mavros/**/vision_pose:
+/drone/mavros/**/vision_pose:
   ros__parameters:
     tf.listen: false           # enable tf listener (disable topic subscribers)
     tf.frame_id: "odom"
@@ -260,19 +260,19 @@
     tf.rate_limit: 10.0
 
 # vision_speed_estimate
-/observer/mavros/**/vision_speed:
+/drone/mavros/**/vision_speed:
   ros__parameters:
     listen_twist: true    # enable listen to twist topic, else listen to vec3d topic
     twist_cov: true       # enable listen to twist with covariance topic
 
 # vibration
-/observer/mavros/**/vibration:
+/drone/mavros/**/vibration:
   ros__parameters:
-    frame_id: "observer/base_link"
+    frame_id: "drone/base_link"
 
 
 # wheel_odometry
-/observer/mavros/**/wheel_odometry:
+/drone/mavros/**/wheel_odometry:
   ros__parameters:
     count: 2           # number of wheels to compute odometry
     use_rpm: false     # use wheel's RPM instead of cumulative distance to compute odometry
@@ -281,14 +281,14 @@
     send_raw: true              # send wheel's RPM and cumulative distance (~/wheel_odometry/rpm, ~/wheel_odometry/distance)
     send_twist: false           # send geometry_msgs/TwistWithCovarianceStamped instead of nav_msgs/Odometry
     frame_id: "odom"             # origin frame
-    child_frame_id: "observer/base_link" # body-fixed frame
+    child_frame_id: "drone/base_link" # body-fixed frame
     vel_error: 0.1              # wheel velocity measurement error 1-std (m/s)
     tf.send: false
     tf.frame_id: "odom"
-    tf.child_frame_id: "observer/base_link"
+    tf.child_frame_id: "drone/base_link"
 
 # camera
-/observer/mavros/**/camera:
+/drone/mavros/**/camera:
   ros__parameters:
-    frame_id: "observer/base_link"
+    frame_id: "drone/base_link"
     
