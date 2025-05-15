@@ -172,7 +172,7 @@ def generate_launch_description():
         executable='rviz2',
         output='screen',
         name='sim_rviz2',
-        arguments=['-d', '/home/user/shared_volume/ros2_ws/src/drone_sim/rviz/drone_sim.rviz']
+        arguments=['-d', '/home/user/shared_volume/ros2_ws/src/ros2_agent_sim/drone_sim/rviz/drone_sim.rviz']
     )
 
     # Add all nodes and launches to the launch description
