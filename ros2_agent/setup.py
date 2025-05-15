@@ -19,7 +19,9 @@ setup(
     maintainer_email='agm.musalami@gmail.com',
     description='ROS2 Agent for Unitree Go2 Quadruped Robot with Natural Language Control using Large Language Models',
     license='MIT',
-    tests_require=['pytest'],
+    extras_require={
+        'test': ['pytest'],
+    },
     entry_points={
         'console_scripts': [
             'ros2_agent_node = ros2_agent.ros2_agent_node:main'
