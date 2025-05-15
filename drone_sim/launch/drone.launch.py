@@ -49,9 +49,9 @@ def generate_launch_description():
     # MAVROS
     file_name = 'drone_px4_pluginlists.yaml'
     package_share_directory = get_package_share_directory('drone_sim')
-    plugins_file_path = os.path.join(package_share_directory, file_name)
+    plugins_file_path = os.path.join(package_share_directory,'mavros', file_name)
     file_name = 'drone_px4_config.yaml'
-    config_file_path = os.path.join(package_share_directory, file_name)
+    config_file_path = os.path.join(package_share_directory,'mavros', file_name)
     mavros_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([

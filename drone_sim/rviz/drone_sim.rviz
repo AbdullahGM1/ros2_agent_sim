@@ -54,7 +54,7 @@ Visualization Manager:
         All Enabled: true
         base_link:
           Value: true
-        base_link_frd:
+        drone/base_link_frd:
           Value: true
         drone/base_link:
           Value: true
