@@ -14,6 +14,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         # Add config files to the installation
         ('share/' + package_name + '/config', glob('config/*.yaml')),
+        # Add launch files to the installation
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools', 'rosa'],  # Added 'rosa' dependency
     zip_safe=True,
