@@ -12,12 +12,14 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        # Add config files to the installation
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools', 'rosa'],  # Added 'rosa' dependency
     zip_safe=True,
     maintainer='AbdullagGN1',
     maintainer_email='agm.musalami@gmail.com',
-    description='ROS2 Agent for Unitree Go2 Quadruped Robot with Natural Language Control using Large Language Models',
+    description='ROS2 Agent for ISAR robots system with Natural Language Control using Large Language Models',
     license='MIT',
     extras_require={
         'test': ['pytest'],
