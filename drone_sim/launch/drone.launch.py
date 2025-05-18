@@ -162,7 +162,13 @@ def generate_launch_description():
             '/gimbal/cmd_pitch@std_msgs/msg/Float64]ignition.msgs.Double',
             '/imu_gimbal@sensor_msgs/msg/Imu[ignition.msgs.IMU',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image:=' + ns + '/gimbal_camera',
-            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info:=' + ns + '/gimbal_camera_info'
+            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info:=' + ns + '/gimbal_camera_info',
+            '--ros-args', '-r', '/gimbal/cmd_yaw:=' + ns + '/gimbal/cmd_yaw',
+            '--ros-args', '-r', '/gimbal/cmd_roll:=' + ns + '/gimbal/cmd_roll',
+            '--ros-args', '-r', '/gimbal/cmd_pitch:=' + ns + '/gimbal/cmd_pitch',
+            '--ros-args', '-r', '/imu_gimbal:=' + ns + '/imu_gimbal',
+            '--ros-args', '-r', '/scan:=' + ns + '/scan',
+            '--ros-args', '-r', '/scan/points:=' + ns + '/scan/points'
         ],
     )
 
