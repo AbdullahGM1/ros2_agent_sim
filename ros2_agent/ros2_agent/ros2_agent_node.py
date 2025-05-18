@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Main entry point for the Multi-Robot ROS2 Agent for Search and Rescue operations."""
+"""Main entry point for the ISAR System Control ROS2 Agent."""
 
 import rclpy
 import threading
@@ -9,14 +9,13 @@ import signal
 import sys
 import os
 import math
-import json
 from datetime import datetime
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import Image, BatteryState
-from std_msgs.msg import String, Float64
+from sensor_msgs.msg import Image
+from std_msgs.msg import String
 from cv_bridge import CvBridge
 from rosa import ROSA
 
@@ -27,21 +26,18 @@ from .llm.model import initialize_llm
 
 
 class Ros2AgentNode(Node):
-    """Main ROS2 node for ROSA Multi-Robot Agent."""
+    """Main ROS2 node for ROSA Drone Agent."""
     
     def __init__(self):
-        super().__init__('multi_robot_agent_node')
+        super().__init__('drone_agent_node')
         
         # Mission-specific data
         self.mission_start_time = datetime.now()
-        self.mission_name = "SAR_Mission"
+        self.mission_name = "Drone_Mission"
         self.waypoints = []  # For marking points of interest
         
         # ============================= PARAMETERS =============================
         self._declare_and_get_parameters()
-        
-        # ============================= ROBOT REGISTRY =============================
-        self._initialize_robot_registry()
         
         # ============================= INITIALIZE NODE =============================
         self._initialize_node()
@@ -52,72 +48,43 @@ class Ros2AgentNode(Node):
         # Create logs directory if it doesn't exist
         os.makedirs('mission_logs', exist_ok=True)
         
-        self.get_logger().info("Multi-Robot Agent is ready. Type a command:")
+        self.get_logger().info("Drone Agent is ready. Type a command:")
     
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
-        # Agent parameters
-        self.declare_parameter('mission_name', 'iSAR_Mission')
+        # Drone parameters
+        self.declare_parameter('namespace', '/drone/mavros')
+        self.declare_parameter('camera_topic', '/drone/gimbal_camera')
+        self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
+        self.declare_parameter('cmd_vel_topic', '/drone/mavros/setpoint_velocity/cmd_vel')
+        self.declare_parameter('flight_speed', 2.0)  # m/s
         self.declare_parameter('control_rate', 20.0)  # Hz
-        self.declare_parameter('position_tolerance', 0.1)  # meters
+        self.declare_parameter('position_tolerance', 0.2)  # meters
         self.declare_parameter('llm_model', 'qwen3:8b')
-        self.declare_parameter('robots_config_file', '')  # Path to robots config JSON
         
         # Get parameters
-        self.mission_name = self.get_parameter('mission_name').value
+        self.namespace = self.get_parameter('namespace').value
+        self.camera_topic = self.get_parameter('camera_topic').value
+        self.odom_topic = self.get_parameter('odom_topic').value
+        self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
+        self.flight_speed = self.get_parameter('flight_speed').value
         self.control_rate = self.get_parameter('control_rate').value
         self.position_tolerance = self.get_parameter('position_tolerance').value
         self.llm_model = self.get_parameter('llm_model').value
-        self.robots_config_file = self.get_parameter('robots_config_file').value
         
         # Log parameters
-        self.get_logger().info(f"Mission: {self.mission_name}")
-        self.get_logger().info(f"Control parameters: control_rate={self.control_rate}, "
-                              f"position_tolerance={self.position_tolerance}")
+        self.get_logger().info(f"Drone Mission: {self.mission_name}")
+        self.get_logger().info(f"Namespace: {self.namespace}")
+        self.get_logger().info(f"Topics: odom={self.odom_topic}, cmd_vel={self.cmd_vel_topic}")
+        self.get_logger().info(f"Camera topic: {self.camera_topic}")
+        self.get_logger().info(f"Control parameters: flight_speed={self.flight_speed}, "
+                             f"control_rate={self.control_rate}, "
+                             f"position_tolerance={self.position_tolerance}")
         self.get_logger().info(f"Using LLM model: {self.llm_model}")
     
-    def _initialize_robot_registry(self):
-        """Initialize the robot registry from configuration."""
-        self.robots = {}
-        
-        # If a config file is provided, load robots from it
-        if self.robots_config_file and os.path.exists(self.robots_config_file):
-            try:
-                with open(self.robots_config_file, 'r') as f:
-                    config = json.load(f)
-                    if 'robots' in config:
-                        for robot in config['robots']:
-                            if 'id' in robot:
-                                self.robots[robot['id']] = robot
-                self.get_logger().info(f"Loaded {len(self.robots)} robots from config file")
-            except Exception as e:
-                self.get_logger().error(f"Error loading robots config: {str(e)}")
-        
-        # Add default robots if none were loaded
-        if not self.robots:
-            self.robots = {
-                "drone1": {
-                    "type": "drone",
-                    "namespace": "/drone1",
-                    "initialized": False,
-                    "active": False,
-                    "topics": {
-                        "pose": "/drone1/mavros/local_position/pose",
-                        "battery": "/drone1/mavros/battery",
-                        "camera": "/drone1/gimbal_camera",
-                        "cmd_vel": "/drone1/mavros/setpoint_velocity/cmd_vel"
-                    }
-                }
-            }
-            self.get_logger().info("Using default robot configuration (drone1)")
-        
-        # Log the registered robots
-        for robot_id, robot_info in self.robots.items():
-            self.get_logger().info(f"Registered robot: {robot_id} (Type: {robot_info.get('type', 'unknown')})")
-    
     def _initialize_node(self):
-        """Initialize node components for all robots."""
-        # Create QoS profiles
+        """Initialize node components."""
+        # Create QoS profile for reliable communication
         self.qos_reliable = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
@@ -132,121 +99,41 @@ class Ros2AgentNode(Node):
             depth=1
         )
         
+        # Initialize publishers
+        self.cmd_vel_publisher = self.create_publisher(
+            Twist,
+            self.cmd_vel_topic,
+            self.qos_reliable
+        )
+        
+        # Initialize subscribers
+        self.pose_subscriber = self.create_subscription(
+            PoseStamped,
+            self.odom_topic,
+            self.pose_callback,
+            self.qos_sensor
+        )
+        
         # Initialize CV Bridge for image processing
         self.bridge = CvBridge()
         
-        # Camera thread control
-        self.camera_active = {}  # Dictionary to track active cameras by robot_id
-        self.camera_threads = {}  # Dictionary to track camera threads by robot_id
-        self.camera_lock = threading.Lock()
+        # State variables
+        self.current_pose = PoseStamped()
         
-        # Initialize subscribers and publishers for each robot
-        for robot_id, robot_info in self.robots.items():
-            self._initialize_robot_interfaces(robot_id, robot_info)
+        # Camera thread control
+        self.camera_active = False
+        self.camera_thread = None
+        self.camera_lock = threading.Lock()
         
         # For graceful shutdown
         self.running = True
         signal.signal(signal.SIGINT, self.signal_handler)
     
-    def _initialize_robot_interfaces(self, robot_id, robot_info):
-        """Initialize interfaces (subscribers, publishers) for a specific robot."""
-        robot_type = robot_info.get('type', 'unknown')
-        robot_ns = robot_info.get('namespace', f'/{robot_id}')
-        
-        # Set initial pose attribute
-        setattr(self, f'{robot_id}_pose', PoseStamped())
-        
-        # Default topics based on robot type and namespace
-        default_topics = {
-            'drone': {
-                'pose': f'{robot_ns}/mavros/local_position/pose',
-                'battery': f'{robot_ns}/mavros/battery',
-                'camera': f'{robot_ns}/gimbal_camera',
-                'cmd_vel': f'{robot_ns}/mavros/setpoint_velocity/cmd_vel'
-            },
-            'wheeled': {
-                'pose': f'{robot_ns}/odom',
-                'battery': f'{robot_ns}/battery_state',
-                'camera': f'{robot_ns}/camera/image_raw',
-                'cmd_vel': f'{robot_ns}/cmd_vel'
-            },
-            'legged': {
-                'pose': f'{robot_ns}/odom',
-                'battery': f'{robot_ns}/battery_state',
-                'camera': f'{robot_ns}/camera/image_raw',
-                'cmd_vel': f'{robot_ns}/cmd_vel'
-            }
-        }
-        
-        # Use default topics for the robot type, if known
-        if robot_type in default_topics and 'topics' not in robot_info:
-            robot_info['topics'] = default_topics[robot_type]
-        
-        # Get topics from robot info, with fallbacks
-        topics = robot_info.get('topics', {})
-        pose_topic = topics.get('pose', f'{robot_ns}/odom')
-        battery_topic = topics.get('battery', f'{robot_ns}/battery_state')
-        camera_topic = topics.get('camera', f'{robot_ns}/camera/image_raw')
-        cmd_vel_topic = topics.get('cmd_vel', f'{robot_ns}/cmd_vel')
-        
-        # Store topics in robot info for reference
-        if 'topics' not in robot_info:
-            robot_info['topics'] = {}
-        robot_info['topics']['pose'] = pose_topic
-        robot_info['topics']['battery'] = battery_topic
-        robot_info['topics']['camera'] = camera_topic
-        robot_info['topics']['cmd_vel'] = cmd_vel_topic
-        
-        # Create callback for position updates
-        def pose_callback(msg):
-            # Adjust to handle both PoseStamped and Odometry messages
-            if hasattr(msg, 'pose'):
-                # This is a PoseStamped message
-                setattr(self, f'{robot_id}_pose', msg)
-            elif hasattr(msg, 'pose') and hasattr(msg.pose, 'pose'):
-                # This is an Odometry message, convert to PoseStamped
-                pose_msg = PoseStamped()
-                pose_msg.header = msg.header
-                pose_msg.pose = msg.pose.pose
-                setattr(self, f'{robot_id}_pose', pose_msg)
-        
-        # Create callback for battery updates
-        def battery_callback(msg):
-            setattr(self, f'{robot_id}_battery', msg)
-        
-        # Initialize subscribers based on message types
-        if pose_topic.endswith('/odom'):
-            # For robots that use Odometry messages
-            setattr(self, f'{robot_id}_pose_sub', self.create_subscription(
-                Odometry, pose_topic, pose_callback, self.qos_sensor
-            ))
-        else:
-            # For robots that use PoseStamped messages (like drones)
-            setattr(self, f'{robot_id}_pose_sub', self.create_subscription(
-                PoseStamped, pose_topic, pose_callback, self.qos_sensor
-            ))
-        
-        # Battery subscriber
-        setattr(self, f'{robot_id}_battery_sub', self.create_subscription(
-            BatteryState, battery_topic, battery_callback, self.qos_sensor
-        ))
-        
-        # Command velocity publisher
-        setattr(self, f'{robot_id}_cmd_vel_pub', self.create_publisher(
-            Twist, cmd_vel_topic, self.qos_reliable
-        ))
-        
-        # Initialize camera status
-        self.camera_active[robot_id] = False
-        self.camera_threads[robot_id] = None
-        
-        self.get_logger().info(f"Initialized interfaces for {robot_id}")
-        self.get_logger().info(f"  Pose topic: {pose_topic}")
-        self.get_logger().info(f"  Battery topic: {battery_topic}")
-        self.get_logger().info(f"  Camera topic: {camera_topic}")
-        self.get_logger().info(f"  Cmd_vel topic: {cmd_vel_topic}")
+    def pose_callback(self, msg):
+        """Callback for drone position updates."""
+        self.current_pose = msg
     
-    def add_waypoint(self, waypoint_type, x, y, z, description="", robot_id=None):
+    def add_waypoint(self, waypoint_type, x, y, z, description=""):
         """Add a waypoint to the mission data."""
         waypoint = {
             "type": waypoint_type,
@@ -254,8 +141,7 @@ class Ros2AgentNode(Node):
             "y": y,
             "z": z,
             "description": description,
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "robot_id": robot_id  # Associate waypoint with specific robot if provided
+            "time": datetime.now().strftime("%H:%M:%S")
         }
         self.waypoints.append(waypoint)
         self.get_logger().info(f"Added {waypoint_type} waypoint at ({x}, {y}, {z}): {description}")
@@ -263,32 +149,20 @@ class Ros2AgentNode(Node):
     
     def signal_handler(self, sig, frame):
         """Handle SIGINT (Ctrl+C) gracefully."""
-        self.get_logger().info("Shutdown signal received, stopping robots and cleaning up...")
+        self.get_logger().info("Shutdown signal received, stopping drone and cleaning up...")
         self.running = False
         
-        # Stop all robots
-        for robot_id in self.robots.keys():
-            try:
-                # Get the cmd_vel publisher for this robot
-                cmd_vel_pub = getattr(self, f'{robot_id}_cmd_vel_pub', None)
-                if cmd_vel_pub:
-                    # Send stop command
-                    stop_cmd = Twist()
-                    cmd_vel_pub.publish(stop_cmd)
-                    self.get_logger().info(f"Stopped {robot_id}")
-            except Exception as e:
-                self.get_logger().error(f"Error stopping {robot_id}: {str(e)}")
+        # Stop the drone
+        stop_cmd = Twist()
+        self.cmd_vel_publisher.publish(stop_cmd)
         
-        # Stop all cameras
+        # Stop camera if active
         with self.camera_lock:
-            for robot_id in list(self.camera_active.keys()):
-                if self.camera_active.get(robot_id, False):
-                    self.camera_active[robot_id] = False
+            if self.camera_active:
+                self.camera_active = False
         
-        # Join camera threads
-        for robot_id, thread in self.camera_threads.items():
-            if thread is not None and thread.is_alive():
-                thread.join(timeout=1.0)
+        if self.camera_thread is not None and self.camera_thread.is_alive():
+            self.camera_thread.join(timeout=1.0)
         
         # Save mission data
         self.save_mission_data()
@@ -316,7 +190,6 @@ class Ros2AgentNode(Node):
             "start_time": self.mission_start_time.isoformat(),
             "end_time": datetime.now().isoformat(),
             "duration_seconds": (datetime.now() - self.mission_start_time).total_seconds(),
-            "robots": list(self.robots.keys()),
             "waypoints": self.waypoints
         }
         
@@ -352,7 +225,7 @@ class Ros2AgentNode(Node):
 
 
 def main(args=None):
-    """Main function to run the Multi-Robot Agent Node with rich CLI."""
+    """Main function to run the Drone Agent Node with rich CLI."""
     rclpy.init(args=args)
     
     # Create the node
