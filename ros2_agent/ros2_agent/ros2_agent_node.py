@@ -26,7 +26,8 @@ class Ros2AgentNode(Node):
         
         # ============================= PARAMETERS =============================
         self._declare_and_get_parameters()
-        
+
+        time.sleep(3)
         # ============================= INITIALIZE NODE =============================
         self._initialize_node()
         
@@ -38,7 +39,6 @@ class Ros2AgentNode(Node):
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
         # Drone parameters
-        self.declare_parameter('namespace', '/drone/mavros')
         self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
         self.declare_parameter('cmd_vel_topic', '/drone/mavros/setpoint_velocity/cmd_vel')
         self.declare_parameter('flight_speed', 2.0)  # m/s
@@ -47,7 +47,6 @@ class Ros2AgentNode(Node):
         self.declare_parameter('llm_model', 'qwen3:8b')
         
         # Get parameters
-        self.namespace = self.get_parameter('namespace').value
         self.odom_topic = self.get_parameter('odom_topic').value
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         self.flight_speed = self.get_parameter('flight_speed').value
@@ -56,7 +55,6 @@ class Ros2AgentNode(Node):
         self.llm_model = self.get_parameter('llm_model').value
         
         # Log parameters
-        self.get_logger().info(f"Namespace: {self.namespace}")
         self.get_logger().info(f"Topics: odom={self.odom_topic}, cmd_vel={self.cmd_vel_topic}")
         self.get_logger().info(f"Control parameters: flight_speed={self.flight_speed}, "
                              f"control_rate={self.control_rate}, "
