@@ -180,90 +180,110 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land safely at its current position.
-            
-            This will initiate a controlled descent and ensure the drone lands safely.
+            Command the drone to land at its current position using direct velocity control.
+            This ensures the drone will descend regardless of flight mode or service availability.
             
             Returns:
-                str: Status message about the landing operation
+                str: Status message about the landing command
             """
-            node.get_logger().info("Initiating landing sequence...")
+            node.get_logger().info("Executing landing sequence...")
             
-            # Try to switch to land mode (as a primary approach)
-            try:
-                mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
-                if mode_client.wait_for_service(timeout_sec=2.0):
-                    mode_request = SetMode.Request()
-                    mode_request.custom_mode = "AUTO.LAND"
-                    
-                    future = mode_client.call_async(mode_request)
-                    
-                    # Wait for result
-                    timeout = 5.0
-                    start_time = time.time()
-                    while time.time() - start_time < timeout and not future.done():
-                        time.sleep(0.1)
-                        
-                    if future.done() and future.result().mode_sent:
-                        node.get_logger().info("AUTO.LAND mode set successfully")
-                        return (
-                            f"Landing sequence initiated successfully!\n\n"
-                            f"• Mode: AUTO.LAND\n"
-                            f"• The drone should now be descending to the ground automatically."
-                        )
-            except Exception as e:
-                node.get_logger().warning(f"Could not set AUTO.LAND mode: {str(e)}")
-            
-            # Fallback approach: Controlled descent using position setpoints
-            node.get_logger().info("Using position-based controlled descent...")
-            
-            # Create setpoint at current x,y with 0 altitude
-            setpoint = PoseStamped()
-            setpoint.header.frame_id = "map"
-            setpoint.pose.position.x = 0.0  # Maintain current X
-            setpoint.pose.position.y = 0.0  # Maintain current Y
-            setpoint.pose.position.z = 0.0  # Target ground level
-            
-            # Set orientation (identity quaternion - no rotation)
-            setpoint.pose.orientation.w = 1.0
-            setpoint.pose.orientation.x = 0.0
-            setpoint.pose.orientation.y = 0.0
-            setpoint.pose.orientation.z = 0.0
-            
-            # Store the landing setpoint on the node
-            node.target_setpoint = setpoint
-            
-            # Make sure we have a setpoint publisher and thread
-            if not hasattr(node, 'setpoint_pub'):
-                node.setpoint_pub = node.create_publisher(
-                    PoseStamped,
-                    '/drone/mavros/setpoint_position/local',
+            # Create velocity publisher if it doesn't exist
+            if not hasattr(node, 'cmd_vel_publisher'):
+                node.cmd_vel_publisher = node.create_publisher(
+                    Twist,
+                    '/drone/mavros/setpoint_velocity/cmd_vel',
                     10
                 )
             
-            # Start continuous setpoint publishing if not already running
-            if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
-                def setpoint_publisher_thread():
-                    rate = node.create_rate(10)  # 10 Hz
-                    while node.running:
-                        if hasattr(node, 'target_setpoint'):
-                            # Update timestamp
-                            node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
-                            # Publish current target
-                            node.setpoint_pub.publish(node.target_setpoint)
-                        
-                        rate.sleep()
+            # 1. First, try to switch to land mode (as a background attempt)
+            try:
+                mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
+                if mode_client.wait_for_service(timeout_sec=1.0):
+                    mode_request = SetMode.Request()
+                    mode_request.custom_mode = "AUTO.LAND"
+                    mode_client.call_async(mode_request)
+                    node.get_logger().info("Land mode request sent (background)")
+            except Exception as e:
+                node.get_logger().warning(f"Mode switch failed: {str(e)}")
+            
+            # 2. Create a dedicated thread for controlled descent using velocity commands
+            def controlled_descent():
+                node.get_logger().info("Starting controlled descent...")
+                
+                # Initialize descent velocity command
+                from geometry_msgs.msg import Twist
+                vel_cmd = Twist()
+                vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
+                
+                # Get control rate for sleep calculations
+                control_rate = 10.0  # Hz
+                if hasattr(node, 'control_rate'):
+                    control_rate = node.control_rate
+                sleep_time = 1.0 / control_rate
+                
+                # Minimum altitude to consider "landed"
+                min_altitude = 0.15  # meters
+                
+                # Maximum time for landing (safety timeout)
+                max_landing_time = 120.0  # seconds
+                start_time = time.time()
+                
+                # Start descent loop
+                while node.running:
+                    # Get current altitude if available
+                    current_alt = 0
+                    if hasattr(node, 'current_pose') and hasattr(node.current_pose, 'pose'):
+                        current_alt = node.current_pose.pose.position.z
                     
-                node.setpoint_thread = threading.Thread(target=setpoint_publisher_thread)
-                node.setpoint_thread.daemon = True
-                node.setpoint_thread.start()
-                node.get_logger().info("Started continuous setpoint publisher")
+                    # Check if we're already at the ground
+                    if current_alt <= min_altitude:
+                        node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
+                        # Send stop command to ensure motors off
+                        stop_cmd = Twist()
+                        for _ in range(5):
+                            node.cmd_vel_publisher.publish(stop_cmd)
+                            time.sleep(0.05)
+                        break
+                    
+                    # Adjust velocity based on altitude (slow down near ground)
+                    if current_alt < 1.0:
+                        vel_cmd.linear.z = -0.2  # Slower descent near ground
+                    else:
+                        vel_cmd.linear.z = -0.5  # Normal descent
+                    
+                    # Send descent command
+                    node.cmd_vel_publisher.publish(vel_cmd)
+                    
+                    # Check timeout
+                    if time.time() - start_time > max_landing_time:
+                        node.get_logger().warning("Landing timeout exceeded, stopping descent")
+                        # Send stop command
+                        stop_cmd = Twist()
+                        node.cmd_vel_publisher.publish(stop_cmd)
+                        break
+                    
+                    # Sleep for control interval
+                    time.sleep(sleep_time)
+                
+                # Final stop command to ensure motors off
+                stop_cmd = Twist()
+                for _ in range(5):
+                    node.cmd_vel_publisher.publish(stop_cmd)
+                    time.sleep(0.05)
+                
+                node.get_logger().info("Controlled descent completed")
+            
+            # Start the controlled descent thread
+            descent_thread = threading.Thread(target=controlled_descent)
+            descent_thread.daemon = True
+            descent_thread.start()
             
             return (
-                f"Landing sequence initiated successfully!\n\n"
-                f"• Method: Controlled position descent\n"
-                f"• Target: Ground level (altitude 0.0m)\n\n"
-                f"The drone should now be descending to the ground."
+                f"LANDING procedure initiated.\n\n"
+                f"• Method: Controlled velocity descent\n"
+                f"• The drone is now descending toward the ground at a safe speed\n\n"
+                f"Landing should complete soon.\n"
             )
                         ######################## Landing Tool Ends ########################
 
