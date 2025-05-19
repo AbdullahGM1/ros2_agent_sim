@@ -23,6 +23,7 @@ class RobotTools:
         # Reference to the node for use in the closure
         node = self.node
         
+        ######################## Takeoff Tool Starts ########################
         @tool
         def takeoff(altitude: float = 5.0) -> str:
             """
@@ -46,7 +47,7 @@ class RobotTools:
             
             node.get_logger().info(f"Initiating takeoff sequence to altitude {altitude}m...")
             
-            # Step 1: Create service clients for arming and mode setting
+            # Step 1: Create service clients for [Arming] and [Mode Setting]
             arming_client = node.create_client(
                 CommandBool, 
                 '/drone/mavros/cmd/arming'
@@ -169,5 +170,7 @@ class RobotTools:
                 f"The drone should now be climbing to the target altitude."
             )
         
+            ######################## Takeoff Tool Ends ########################
+
         # Return the tools
         return [takeoff]
