@@ -1,5 +1,5 @@
-"""Prompts module for Unitree Go2 Robot."""
+"""Prompts module for Multi-Robot System."""
 
-from .system_prompts import create_system_prompts
+from .system_prompts import system_prompts
 
-__all__ = ['create_system_prompts']
+__all__ = ['system_prompts']

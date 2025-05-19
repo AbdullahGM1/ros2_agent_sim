@@ -7,7 +7,7 @@ This module contains all prompt-related configurations for SAR missions.
 from rosa.prompts import RobotSystemPrompts
 
 
-def create_system_prompts() -> RobotSystemPrompts:
+def system_prompts() -> RobotSystemPrompts:
     """Create and return the system prompts for the SAR multi-robot agent."""
     
     return RobotSystemPrompts(

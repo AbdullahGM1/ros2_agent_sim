@@ -20,7 +20,7 @@ from cv_bridge import CvBridge
 from rosa import ROSA
 
 from .cli.interface import RichCLI
-from .prompts.system_prompts import create_system_prompts
+from .prompts.system_prompts import system_prompts
 from .tools.robot_tools import RobotTools
 from .llm.model import initialize_llm
 
@@ -211,7 +211,7 @@ class Ros2AgentNode(Node):
         tools = robot_tools.create_tools()
         
         # Create prompts
-        prompts = create_system_prompts()
+        prompts = system_prompts()
         
         # Initialize ROSA
         self.agent = ROSA(
