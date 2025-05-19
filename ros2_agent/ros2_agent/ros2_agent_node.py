@@ -27,6 +27,7 @@ class Ros2AgentNode(Node):
         # ============================= PARAMETERS =============================
         self._declare_and_get_parameters()
 
+        #To see the parameters in the terminal
         time.sleep(3)
         # ============================= INITIALIZE NODE =============================
         self._initialize_node()
@@ -35,42 +36,28 @@ class Ros2AgentNode(Node):
         self.setup_agent()
         
         self.get_logger().info("Drone Agent is ready. Type a command:")
-    
+        time.sleep(3)
+
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
         # Drone parameters
         self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
-        self.declare_parameter('cmd_vel_topic', '/drone/mavros/setpoint_velocity/cmd_vel')
-        self.declare_parameter('flight_speed', 2.0)  # m/s
         self.declare_parameter('control_rate', 20.0)  # Hz
-        self.declare_parameter('position_tolerance', 0.2)  # meters
         self.declare_parameter('llm_model', 'qwen3:8b')
         
         # Get parameters
         self.odom_topic = self.get_parameter('odom_topic').value
-        self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
-        self.flight_speed = self.get_parameter('flight_speed').value
         self.control_rate = self.get_parameter('control_rate').value
-        self.position_tolerance = self.get_parameter('position_tolerance').value
         self.llm_model = self.get_parameter('llm_model').value
         
         # Log parameters
-        self.get_logger().info(f"Topics: odom={self.odom_topic}, cmd_vel={self.cmd_vel_topic}")
-        self.get_logger().info(f"Control parameters: flight_speed={self.flight_speed}, "
-                             f"control_rate={self.control_rate}, "
-                             f"position_tolerance={self.position_tolerance}")
+        self.get_logger().info(f"Odom topic: {self.odom_topic}")
+        self.get_logger().info(f"Control rate: {self.control_rate}")
         self.get_logger().info(f"Using LLM model: {self.llm_model}")
     
     def _initialize_node(self):
         """Initialize node components."""
-        # Create QoS profile for reliable communication
-        self.qos_reliable = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
-        
+        # Create QoS profile for sensor data
         self.qos_sensor = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             durability=DurabilityPolicy.VOLATILE,
