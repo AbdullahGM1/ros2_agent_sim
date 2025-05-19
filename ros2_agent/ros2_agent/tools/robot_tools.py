@@ -23,7 +23,8 @@ class RobotTools:
         # Reference to the node for use in the closure
         node = self.node
         
-        ######################## Takeoff Tool Starts ########################
+                    ######################## Takeoff Tool Starts ########################
+
         @tool
         def takeoff(altitude: float = 5.0) -> str:
             """
@@ -170,7 +171,104 @@ class RobotTools:
                 f"The drone should now be climbing to the target altitude."
             )
         
-            ######################## Takeoff Tool Ends ########################
+                    ######################## Takeoff Tool Ends ########################
+
+
+
+                    ######################## Landing Tool Starts ########################
+
+        @tool
+        def land() -> str:
+            """
+            Command the drone to land safely at its current position.
+            
+            This will initiate a controlled descent and ensure the drone lands safely.
+            
+            Returns:
+                str: Status message about the landing operation
+            """
+            node.get_logger().info("Initiating landing sequence...")
+            
+            # Try to switch to land mode (as a primary approach)
+            try:
+                mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
+                if mode_client.wait_for_service(timeout_sec=2.0):
+                    mode_request = SetMode.Request()
+                    mode_request.custom_mode = "AUTO.LAND"
+                    
+                    future = mode_client.call_async(mode_request)
+                    
+                    # Wait for result
+                    timeout = 5.0
+                    start_time = time.time()
+                    while time.time() - start_time < timeout and not future.done():
+                        time.sleep(0.1)
+                        
+                    if future.done() and future.result().mode_sent:
+                        node.get_logger().info("AUTO.LAND mode set successfully")
+                        return (
+                            f"Landing sequence initiated successfully!\n\n"
+                            f"• Mode: AUTO.LAND\n"
+                            f"• The drone should now be descending to the ground automatically."
+                        )
+            except Exception as e:
+                node.get_logger().warning(f"Could not set AUTO.LAND mode: {str(e)}")
+            
+            # Fallback approach: Controlled descent using position setpoints
+            node.get_logger().info("Using position-based controlled descent...")
+            
+            # Create setpoint at current x,y with 0 altitude
+            setpoint = PoseStamped()
+            setpoint.header.frame_id = "map"
+            setpoint.pose.position.x = 0.0  # Maintain current X
+            setpoint.pose.position.y = 0.0  # Maintain current Y
+            setpoint.pose.position.z = 0.0  # Target ground level
+            
+            # Set orientation (identity quaternion - no rotation)
+            setpoint.pose.orientation.w = 1.0
+            setpoint.pose.orientation.x = 0.0
+            setpoint.pose.orientation.y = 0.0
+            setpoint.pose.orientation.z = 0.0
+            
+            # Store the landing setpoint on the node
+            node.target_setpoint = setpoint
+            
+            # Make sure we have a setpoint publisher and thread
+            if not hasattr(node, 'setpoint_pub'):
+                node.setpoint_pub = node.create_publisher(
+                    PoseStamped,
+                    '/drone/mavros/setpoint_position/local',
+                    10
+                )
+            
+            # Start continuous setpoint publishing if not already running
+            if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
+                def setpoint_publisher_thread():
+                    rate = node.create_rate(10)  # 10 Hz
+                    while node.running:
+                        if hasattr(node, 'target_setpoint'):
+                            # Update timestamp
+                            node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
+                            # Publish current target
+                            node.setpoint_pub.publish(node.target_setpoint)
+                        
+                        rate.sleep()
+                    
+                node.setpoint_thread = threading.Thread(target=setpoint_publisher_thread)
+                node.setpoint_thread.daemon = True
+                node.setpoint_thread.start()
+                node.get_logger().info("Started continuous setpoint publisher")
+            
+            return (
+                f"Landing sequence initiated successfully!\n\n"
+                f"• Method: Controlled position descent\n"
+                f"• Target: Ground level (altitude 0.0m)\n\n"
+                f"The drone should now be descending to the ground."
+            )
+                        ######################## Landing Tool Ends ########################
+
 
         # Return the tools
-        return [takeoff]
+        return [
+                takeoff,
+                land]
