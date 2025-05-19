@@ -28,7 +28,7 @@ class Ros2AgentNode(Node):
         self._declare_and_get_parameters()
 
         #To see the parameters in the terminal
-        time.sleep(3)
+        time.sleep(2)
         # ============================= INITIALIZE NODE =============================
         self._initialize_node()
         
@@ -36,7 +36,7 @@ class Ros2AgentNode(Node):
         self.setup_agent()
         
         self.get_logger().info("Drone Agent is ready. Type a command:")
-        time.sleep(3)
+        time.sleep(2)
 
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
