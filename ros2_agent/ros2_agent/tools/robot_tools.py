@@ -16,6 +16,7 @@ class RobotTools:
     """Collection of tools for robot control."""
     
     def __init__(self, node):
+
         self.node = node
         
     def create_tools(self):
@@ -39,13 +40,6 @@ class RobotTools:
             Returns:
                 str: Status message about the takeoff command
             """
-            # Check if landing is still in progress and reset if needed
-            if hasattr(node, 'landing_active') and node.landing_active:
-                node.get_logger().warning("Detected landing state - resetting for new takeoff")
-                node.landing_active = False
-                # Allow a small delay for any active landing processes to clean up
-                time.sleep(0.5)
-            
             # Validate altitude parameter
             if altitude <= 0:
                 return "Invalid altitude. Please specify a positive value in meters."
@@ -54,6 +48,12 @@ class RobotTools:
                 return "Requested altitude exceeds safe limits. Please specify an altitude below 30 meters."
             
             node.get_logger().info(f"Initiating takeoff sequence to altitude {altitude}m...")
+
+            # Re-enable setpoint publishing if it was disabled by landing
+            if hasattr(node, 'publish_setpoints'):
+                node.publish_setpoints = True
+                node.get_logger().info("Resumed position setpoint publishing")
+            
             
             # Step 1: Create service clients for [Arming] and [Mode Setting]
             arming_client = node.create_client(
@@ -156,12 +156,19 @@ class RobotTools:
             if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
                 def setpoint_publisher_thread():
                     rate = node.create_rate(10)  # 10 Hz
+    
+                    # Add a control flag
+                    if not hasattr(node, 'publish_setpoints'):
+                        node.publish_setpoints = True
+                        
                     while node.running:
-                        if hasattr(node, 'target_setpoint'):
-                            # Update timestamp
-                            node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
-                            # Publish current target
-                            node.setpoint_pub.publish(node.target_setpoint)
+                        # Check if we should be publishing
+                        if hasattr(node, 'publish_setpoints') and node.publish_setpoints:
+                            if hasattr(node, 'target_setpoint'):
+                                # Update timestamp
+                                node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
+                                # Publish current target
+                                node.setpoint_pub.publish(node.target_setpoint)
                         
                         rate.sleep()
                     
@@ -187,136 +194,53 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land at its current position using direct velocity control.
-            This ensures the drone will descend regardless of flight mode or service availability.
+            Command the drone to land using PX4's native AUTO.LAND mode.
             
             Returns:
                 str: Status message about the landing command
             """
-            # Check if landing is already in progress
-            if hasattr(node, 'landing_active') and node.landing_active:
-                return "Landing already in progress."
-            
             node.get_logger().info("Executing landing sequence...")
             
-            # Create velocity publisher if it doesn't exist
-            if not hasattr(node, 'cmd_vel_publisher'):
-                node.cmd_vel_publisher = node.create_publisher(
-                    Twist,
-                    '/drone/mavros/setpoint_velocity/cmd_vel',
-                    10
-                )
+            # Pause the setpoint publisher before landing
+            if hasattr(node, 'publish_setpoints'):
+                node.publish_setpoints = False
+                node.get_logger().info("Paused position setpoint publishing")
             
-            # Mark landing as active and store start time
-            node.landing_active = True
-            node.landing_start_time = time.time()
-            
-            # Try to switch to land mode (as a background attempt)
+            # Use the PX4 native AUTO.LAND mode
             try:
+                # Create service client for mode setting
                 mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
-                if mode_client.wait_for_service(timeout_sec=1.0):
+                
+                if mode_client.wait_for_service(timeout_sec=2.0):
+                    # Request AUTO.LAND mode
                     mode_request = SetMode.Request()
                     mode_request.custom_mode = "AUTO.LAND"
-                    mode_client.call_async(mode_request)
-                    node.get_logger().info("Land mode request sent")
-            except Exception as e:
-                node.get_logger().warning(f"Mode switch failed: {str(e)}")
-            
-            # Create a dedicated thread for controlled descent using velocity commands
-            def controlled_descent():
-                try:
-                    # Use debug level for most logs to prevent terminal disruption
-                    node.get_logger().debug("Starting controlled descent...")
                     
-                    # Initialize descent velocity command
-                    vel_cmd = Twist()
-                    vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
+                    # Send request asynchronously
+                    future = mode_client.call_async(mode_request)
                     
-                    # Get control rate for sleep calculations
-                    control_rate = 10.0  # Hz
-                    if hasattr(node, 'control_rate'):
-                        control_rate = node.control_rate
-                    sleep_time = 1.0 / control_rate
-                    
-                    # Minimum altitude to consider "landed"
-                    min_altitude = 0.15  # meters
-                    
-                    # Maximum time for landing (safety timeout)
-                    max_landing_time = 120.0  # seconds
+                    # Wait up to 3 seconds for response
+                    timeout = 3.0
                     start_time = time.time()
-                    last_log_time = 0  # For throttling log messages
+                    while time.time() - start_time < timeout and not future.done():
+                        time.sleep(0.1)
                     
-                    # Start descent loop
-                    while node.running and node.landing_active:
-                        # Get current altitude if available
-                        current_alt = 0
-                        try:
-                            if hasattr(node, 'current_pose') and hasattr(node.current_pose, 'pose'):
-                                current_alt = node.current_pose.pose.position.z
-                        except Exception:
-                            pass  # Use default if any error
-                        
-                        # Throttled logging (once every 10 seconds)
-                        current_time = time.time()
-                        if current_time - last_log_time > 10:
-                            node.get_logger().debug(f"Current altitude: {current_alt:.2f}m")
-                            last_log_time = current_time
-                        
-                        # Check if we're already at the ground
-                        if current_alt <= min_altitude:
-                            node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
-                            # Send stop command to ensure motors off
-                            stop_cmd = Twist()
-                            for _ in range(5):
-                                node.cmd_vel_publisher.publish(stop_cmd)
-                                time.sleep(0.05)
-                            break
-                        
-                        # Adjust velocity based on altitude (slow down near ground)
-                        if current_alt < 1.0:
-                            vel_cmd.linear.z = -0.2  # Slower descent near ground
-                        else:
-                            vel_cmd.linear.z = -0.5  # Normal descent
-                        
-                        # Send descent command
-                        node.cmd_vel_publisher.publish(vel_cmd)
-                        
-                        # Check timeout
-                        if time.time() - start_time > max_landing_time:
-                            node.get_logger().warning("Landing timeout exceeded, stopping descent")
-                            # Send stop command
-                            stop_cmd = Twist()
-                            node.cmd_vel_publisher.publish(stop_cmd)
-                            break
-                        
-                        # Sleep for control interval
-                        time.sleep(sleep_time)
-                    
-                    # Final stop command to ensure motors off
-                    stop_cmd = Twist()
-                    for _ in range(5):
-                        node.cmd_vel_publisher.publish(stop_cmd)
-                        time.sleep(0.05)
-                    
-                    node.get_logger().info("Controlled descent completed")
-                    
-                except Exception as e:
-                    node.get_logger().error(f"Error in landing thread: {e}")
-                finally:
-                    # Always mark landing as inactive when done
-                    node.landing_active = False
-            
-            # Create and start the thread
-            landing_thread = threading.Thread(target=controlled_descent)
-            landing_thread.daemon = True
-            landing_thread.start()
-            
-            return (
-                f"LANDING procedure initiated.\n\n"
-                f"• Method: Controlled velocity descent\n"
-                f"• The drone is now descending toward the ground at a safe speed\n\n"
-                f"Landing should complete shortly. You can issue another command once landing completes."
-            )
+                    # Check if AUTO.LAND mode was set successfully
+                    if future.done() and future.result().mode_sent:
+                        node.get_logger().info("AUTO.LAND mode set successfully")
+                        return (
+                            f"Landing initiated using native AUTO.LAND mode.\n\n"
+                            f"• The drone's autopilot will handle the landing sequence\n"
+                            f"• This is the most reliable landing method\n\n"
+                            f"The drone should now be descending to the ground."
+                        )
+                    else:
+                        return "Landing failed - could not set AUTO.LAND mode."
+                else:
+                    return "Landing failed - mode service not available."
+            except Exception as e:
+                node.get_logger().error(f"AUTO.LAND mode failed: {str(e)}")
+                return f"Landing failed - error during mode change: {str(e)}"
                         ######################## Landing Tool Ends ########################
 
 
