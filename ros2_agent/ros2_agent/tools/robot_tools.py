@@ -39,6 +39,12 @@ class RobotTools:
             Returns:
                 str: Status message about the takeoff command
             """
+            # Check if landing is still in progress and reset if needed
+            if hasattr(node, 'landing_active') and node.landing_active:
+                node.get_logger().warning("Detected landing state - resetting for new takeoff")
+                node.landing_active = False
+                # Allow a small delay for any active landing processes to clean up
+                time.sleep(0.5)
             
             # Validate altitude parameter
             if altitude <= 0:
@@ -187,6 +193,10 @@ class RobotTools:
             Returns:
                 str: Status message about the landing command
             """
+            # Check if landing is already in progress
+            if hasattr(node, 'landing_active') and node.landing_active:
+                return "Landing already in progress."
+            
             node.get_logger().info("Executing landing sequence...")
             
             # Create velocity publisher if it doesn't exist
@@ -197,94 +207,115 @@ class RobotTools:
                     10
                 )
             
-            # 1. First, try to switch to land mode (as a background attempt)
+            # Mark landing as active and store start time
+            node.landing_active = True
+            node.landing_start_time = time.time()
+            
+            # Try to switch to land mode (as a background attempt)
             try:
                 mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
                 if mode_client.wait_for_service(timeout_sec=1.0):
                     mode_request = SetMode.Request()
                     mode_request.custom_mode = "AUTO.LAND"
                     mode_client.call_async(mode_request)
-                    node.get_logger().info("Land mode request sent (background)")
+                    node.get_logger().info("Land mode request sent")
             except Exception as e:
                 node.get_logger().warning(f"Mode switch failed: {str(e)}")
             
-            # 2. Create a dedicated thread for controlled descent using velocity commands
+            # Create a dedicated thread for controlled descent using velocity commands
             def controlled_descent():
-                node.get_logger().info("Starting controlled descent...")
-                
-                # Initialize descent velocity command
-                from geometry_msgs.msg import Twist
-                vel_cmd = Twist()
-                vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
-                
-                # Get control rate for sleep calculations
-                control_rate = 10.0  # Hz
-                if hasattr(node, 'control_rate'):
-                    control_rate = node.control_rate
-                sleep_time = 1.0 / control_rate
-                
-                # Minimum altitude to consider "landed"
-                min_altitude = 0.15  # meters
-                
-                # Maximum time for landing (safety timeout)
-                max_landing_time = 120.0  # seconds
-                start_time = time.time()
-                
-                # Start descent loop
-                while node.running:
-                    # Get current altitude if available
-                    current_alt = 0
-                    if hasattr(node, 'current_pose') and hasattr(node.current_pose, 'pose'):
-                        current_alt = node.current_pose.pose.position.z
+                try:
+                    # Use debug level for most logs to prevent terminal disruption
+                    node.get_logger().debug("Starting controlled descent...")
                     
-                    # Check if we're already at the ground
-                    if current_alt <= min_altitude:
-                        node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
-                        # Send stop command to ensure motors off
-                        stop_cmd = Twist()
-                        for _ in range(5):
+                    # Initialize descent velocity command
+                    vel_cmd = Twist()
+                    vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
+                    
+                    # Get control rate for sleep calculations
+                    control_rate = 10.0  # Hz
+                    if hasattr(node, 'control_rate'):
+                        control_rate = node.control_rate
+                    sleep_time = 1.0 / control_rate
+                    
+                    # Minimum altitude to consider "landed"
+                    min_altitude = 0.15  # meters
+                    
+                    # Maximum time for landing (safety timeout)
+                    max_landing_time = 120.0  # seconds
+                    start_time = time.time()
+                    last_log_time = 0  # For throttling log messages
+                    
+                    # Start descent loop
+                    while node.running and node.landing_active:
+                        # Get current altitude if available
+                        current_alt = 0
+                        try:
+                            if hasattr(node, 'current_pose') and hasattr(node.current_pose, 'pose'):
+                                current_alt = node.current_pose.pose.position.z
+                        except Exception:
+                            pass  # Use default if any error
+                        
+                        # Throttled logging (once every 10 seconds)
+                        current_time = time.time()
+                        if current_time - last_log_time > 10:
+                            node.get_logger().debug(f"Current altitude: {current_alt:.2f}m")
+                            last_log_time = current_time
+                        
+                        # Check if we're already at the ground
+                        if current_alt <= min_altitude:
+                            node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
+                            # Send stop command to ensure motors off
+                            stop_cmd = Twist()
+                            for _ in range(5):
+                                node.cmd_vel_publisher.publish(stop_cmd)
+                                time.sleep(0.05)
+                            break
+                        
+                        # Adjust velocity based on altitude (slow down near ground)
+                        if current_alt < 1.0:
+                            vel_cmd.linear.z = -0.2  # Slower descent near ground
+                        else:
+                            vel_cmd.linear.z = -0.5  # Normal descent
+                        
+                        # Send descent command
+                        node.cmd_vel_publisher.publish(vel_cmd)
+                        
+                        # Check timeout
+                        if time.time() - start_time > max_landing_time:
+                            node.get_logger().warning("Landing timeout exceeded, stopping descent")
+                            # Send stop command
+                            stop_cmd = Twist()
                             node.cmd_vel_publisher.publish(stop_cmd)
-                            time.sleep(0.05)
-                        break
+                            break
+                        
+                        # Sleep for control interval
+                        time.sleep(sleep_time)
                     
-                    # Adjust velocity based on altitude (slow down near ground)
-                    if current_alt < 1.0:
-                        vel_cmd.linear.z = -0.2  # Slower descent near ground
-                    else:
-                        vel_cmd.linear.z = -0.5  # Normal descent
-                    
-                    # Send descent command
-                    node.cmd_vel_publisher.publish(vel_cmd)
-                    
-                    # Check timeout
-                    if time.time() - start_time > max_landing_time:
-                        node.get_logger().warning("Landing timeout exceeded, stopping descent")
-                        # Send stop command
-                        stop_cmd = Twist()
+                    # Final stop command to ensure motors off
+                    stop_cmd = Twist()
+                    for _ in range(5):
                         node.cmd_vel_publisher.publish(stop_cmd)
-                        break
+                        time.sleep(0.05)
                     
-                    # Sleep for control interval
-                    time.sleep(sleep_time)
-                
-                # Final stop command to ensure motors off
-                stop_cmd = Twist()
-                for _ in range(5):
-                    node.cmd_vel_publisher.publish(stop_cmd)
-                    time.sleep(0.05)
-                
-                node.get_logger().info("Controlled descent completed")
+                    node.get_logger().info("Controlled descent completed")
+                    
+                except Exception as e:
+                    node.get_logger().error(f"Error in landing thread: {e}")
+                finally:
+                    # Always mark landing as inactive when done
+                    node.landing_active = False
             
-            # Start the controlled descent thread
-            descent_thread = threading.Thread(target=controlled_descent)
-            descent_thread.daemon = True
-            descent_thread.start()
+            # Create and start the thread
+            landing_thread = threading.Thread(target=controlled_descent)
+            landing_thread.daemon = True
+            landing_thread.start()
             
             return (
                 f"LANDING procedure initiated.\n\n"
                 f"• Method: Controlled velocity descent\n"
                 f"• The drone is now descending toward the ground at a safe speed\n\n"
-                f"Landing should complete soon.\n"
+                f"Landing should complete shortly. You can issue another command once landing completes."
             )
                         ######################## Landing Tool Ends ########################
 
