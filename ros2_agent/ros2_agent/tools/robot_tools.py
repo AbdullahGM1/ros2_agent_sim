@@ -16,7 +16,6 @@ class RobotTools:
     """Collection of tools for robot control."""
     
     def __init__(self, node):
-
         self.node = node
         
     def create_tools(self):
@@ -147,11 +146,8 @@ class RobotTools:
             node.get_logger().info("OFFBOARD mode set successfully")
             
             # Step 6: Store the current target setpoint on the node
-            if not hasattr(node, 'target_setpoint'):
-                node.target_setpoint = setpoint
-            else:
-                node.target_setpoint = setpoint
-            
+            node.target_setpoint = setpoint  
+                        
             # Step 7: Start continuous setpoint publishing if not already running
             if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
                 def setpoint_publisher_thread():
@@ -208,16 +204,19 @@ class RobotTools:
             
             # Use the PX4 native AUTO.LAND mode
             try:
-                # Create service client for mode setting
-                mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
+                # Create service client for mode setting (if it doesn't already exist)
+                if not hasattr(node, 'mode_client'):
+                    node.mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
+                    node.get_logger().info("Created mode service client")
                 
-                if mode_client.wait_for_service(timeout_sec=2.0):
+                # Use existing or newly created mode client
+                if node.mode_client.wait_for_service(timeout_sec=2.0):
                     # Request AUTO.LAND mode
                     mode_request = SetMode.Request()
                     mode_request.custom_mode = "AUTO.LAND"
                     
                     # Send request asynchronously
-                    future = mode_client.call_async(mode_request)
+                    future = node.mode_client.call_async(mode_request)
                     
                     # Wait up to 3 seconds for response
                     timeout = 3.0
@@ -241,7 +240,8 @@ class RobotTools:
             except Exception as e:
                 node.get_logger().error(f"AUTO.LAND mode failed: {str(e)}")
                 return f"Landing failed - error during mode change: {str(e)}"
-                        ######################## Landing Tool Ends ########################
+            
+                    ######################## Landing Tool Ends ########################
 
 
         # Return the tools
