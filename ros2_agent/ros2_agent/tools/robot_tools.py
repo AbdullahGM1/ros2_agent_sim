@@ -8,7 +8,7 @@ import time
 import threading
 from geometry_msgs.msg import PoseStamped
 from langchain.agents import tool
-from mavros_msgs.srv import CommandBool, SetMode
+from mavros_msgs.srv import CommandBool, SetMode  # type: ignore
 from geometry_msgs.msg import Twist, PoseStamped
 
 
