@@ -1,326 +1,117 @@
 #!/usr/bin/env python3
 """
 Robot tools for the ROSA Agent.
-This module contains tools for drone control, limited to takeoff only.
+This module contains tools for drone monitoring and control.
 """
 
 import time
-import threading
-from geometry_msgs.msg import PoseStamped
 from langchain.agents import tool
-from mavros_msgs.srv import CommandBool, SetMode
-from geometry_msgs.msg import Twist, PoseStamped
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Quaternion, Point, Pose, PoseStamped, Twist
 
 
 class RobotTools:
-    """Collection of tools for robot control."""
+    """Collection of tools for robot monitoring and control."""
     
     def __init__(self, node):
+        """Initialize with a ROS node."""
         self.node = node
         
+        # Store the latest drone state
+        self.latest_pose = None
+        self.latest_twist = None
+        
+        # Initialize subscribers for drone state
+        self._init_subscribers()
+    
+    def _init_subscribers(self):
+        """Initialize all subscribers for monitoring the drone."""
+        # Subscribe to odometry for pose and velocity information
+        self.node.create_subscription(
+            Odometry,
+            '/drone/mavros/local_position/odom',
+            self._odom_callback,
+            10  # QoS profile depth
+        )
+        self.node.get_logger().info("Subscribed to odometry topic")
+    
+    def _odom_callback(self, msg):
+        """Process incoming odometry messages."""
+        self.latest_pose = msg.pose.pose
+        self.latest_twist = msg.twist.twist
+    
     def create_tools(self):
         """Create and return all robot tools."""
         
-        # Reference to the node for use in the closure
+        # Reference to the node for use in closures
         node = self.node
         
-                    ######################## Takeoff Tool Starts ########################
-
+        # Reference to self for use in closures
+        robot_tools = self
+        
         @tool
-        def takeoff(altitude: float = 5.0) -> str:
+        def get_drone_pose() -> str:
             """
-            Command the drone to take off to the specified altitude using MAVROS.
-            
-            This will arm the drone, set OFFBOARD mode, and command it to ascend.
-            
-            Args:
-                altitude: Target altitude in meters (default: 5.0)
+            Get the current position and orientation of the drone.
             
             Returns:
-                str: Status message about the takeoff command
+                str: Formatted string with position (x, y, z) and orientation (quaternion)
             """
-            # Check if landing is still in progress and reset if needed
-            if hasattr(node, 'landing_active') and node.landing_active:
-                node.get_logger().warning("Detected landing state - resetting for new takeoff")
-                node.landing_active = False
-                # Allow a small delay for any active landing processes to clean up
-                time.sleep(0.5)
+            if robot_tools.latest_pose is None:
+                return "Drone pose data not yet available. Waiting for odometry messages..."
             
-            # Validate altitude parameter
-            if altitude <= 0:
-                return "Invalid altitude. Please specify a positive value in meters."
+            # Extract position
+            pos = robot_tools.latest_pose.position
             
-            if altitude > 30:
-                return "Requested altitude exceeds safe limits. Please specify an altitude below 30 meters."
+            # Extract orientation
+            orient = robot_tools.latest_pose.orientation
             
-            node.get_logger().info(f"Initiating takeoff sequence to altitude {altitude}m...")
-            
-            # Step 1: Create service clients for [Arming] and [Mode Setting]
-            arming_client = node.create_client(
-                CommandBool, 
-                '/drone/mavros/cmd/arming'
-            )
-            mode_client = node.create_client(
-                SetMode, 
-                '/drone/mavros/set_mode'
-            )
-            
-            # Wait for services to be available
-            timeout = 5.0  # seconds
-            if not arming_client.wait_for_service(timeout_sec=timeout):
-                return "Arming service not available. Takeoff aborted."
-            
-            if not mode_client.wait_for_service(timeout_sec=timeout):
-                return "Set mode service not available. Takeoff aborted."
-            
-            # Step 2: Create a setpoint publisher for position control if it doesn't exist
-            if not hasattr(node, 'setpoint_pub'):
-                node.setpoint_pub = node.create_publisher(
-                    PoseStamped,
-                    '/drone/mavros/setpoint_position/local',
-                    10
-                )
-            
-            # Create setpoint with target altitude
-            setpoint = PoseStamped()
-            setpoint.header.frame_id = "map"
-            setpoint.pose.position.x = 0.0  # Use fixed position
-            setpoint.pose.position.y = 0.0  # Use fixed position
-            setpoint.pose.position.z = altitude  # Target altitude
-            
-            # Set orientation (identity quaternion - no rotation)
-            setpoint.pose.orientation.w = 1.0
-            setpoint.pose.orientation.x = 0.0
-            setpoint.pose.orientation.y = 0.0
-            setpoint.pose.orientation.z = 0.0
-            
-            # Step 3: Send a few setpoints before starting (required by MAVROS)
-            node.get_logger().info("Sending initial setpoints...")
-            
-            for i in range(10):
-                setpoint.header.stamp = node.get_clock().now().to_msg()
-                node.setpoint_pub.publish(setpoint)
-                time.sleep(0.1)
-            
-            # Step 4: Request arming
-            node.get_logger().info("Requesting drone arming...")
-            
-            arm_request = CommandBool.Request()
-            arm_request.value = True
-            
-            future = arming_client.call_async(arm_request)
-            
-            # Simplified wait for result
-            start_time = time.time()
-            while time.time() - start_time < timeout and not future.done():
-                time.sleep(0.1)
-            
-            if not future.done():
-                return "Arming request timed out. Takeoff aborted."
-            
-            arm_response = future.result()
-            if not arm_response.success:
-                return f"Arming failed. Takeoff aborted."
-            
-            node.get_logger().info("Drone armed successfully")
-            
-            # Step 5: Set mode to OFFBOARD
-            node.get_logger().info("Setting OFFBOARD mode...")
-            
-            mode_request = SetMode.Request()
-            mode_request.custom_mode = "OFFBOARD"
-            
-            future = mode_client.call_async(mode_request)
-            
-            # Simplified wait for result
-            start_time = time.time()
-            while time.time() - start_time < timeout and not future.done():
-                time.sleep(0.1)
-            
-            if not future.done():
-                return "Set mode request timed out. Takeoff process may be unreliable."
-            
-            mode_response = future.result()
-            if not mode_response.mode_sent:
-                return "Failed to set OFFBOARD mode. Takeoff process may be unreliable."
-            
-            node.get_logger().info("OFFBOARD mode set successfully")
-            
-            # Step 6: Store the current target setpoint on the node
-            if not hasattr(node, 'target_setpoint'):
-                node.target_setpoint = setpoint
-            else:
-                node.target_setpoint = setpoint
-            
-            # Step 7: Start continuous setpoint publishing if not already running
-            if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
-                def setpoint_publisher_thread():
-                    rate = node.create_rate(10)  # 10 Hz
-                    while node.running:
-                        if hasattr(node, 'target_setpoint'):
-                            # Update timestamp
-                            node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
-                            # Publish current target
-                            node.setpoint_pub.publish(node.target_setpoint)
-                        
-                        rate.sleep()
-                    
-                node.setpoint_thread = threading.Thread(target=setpoint_publisher_thread)
-                node.setpoint_thread.daemon = True
-                node.setpoint_thread.start()
-                node.get_logger().info("Started continuous setpoint publisher")
-            
+            # Format the response
             return (
-                f"Takeoff sequence initiated successfully!\n\n"
-                f"• Armed: ✓\n"
-                f"• Mode: OFFBOARD\n"
-                f"• Target altitude: {altitude:.1f}m\n\n"
-                f"The drone should now be climbing to the target altitude."
+                f"Drone Pose:\n"
+                f"Position:\n"
+                f"  x: {pos.x:.2f} meters\n"
+                f"  y: {pos.y:.2f} meters\n"
+                f"  z: {pos.z:.2f} meters (altitude)\n"
+                f"Orientation (quaternion):\n"
+                f"  x: {orient.x:.2f}\n"
+                f"  y: {orient.y:.2f}\n"
+                f"  z: {orient.z:.2f}\n"
+                f"  w: {orient.w:.2f}"
             )
         
-                    ######################## Takeoff Tool Ends ########################
-
-
-
-                    ######################## Landing Tool Starts ########################
-
         @tool
-        def land() -> str:
+        def get_drone_velocity() -> str:
             """
-            Command the drone to land at its current position using direct velocity control.
-            This ensures the drone will descend regardless of flight mode or service availability.
+            Get the current linear and angular velocity of the drone.
             
             Returns:
-                str: Status message about the landing command
+                str: Formatted string with linear and angular velocity components
             """
-            # Check if landing is already in progress
-            if hasattr(node, 'landing_active') and node.landing_active:
-                return "Landing already in progress."
+            if robot_tools.latest_twist is None:
+                return "Drone velocity data not yet available. Waiting for odometry messages..."
             
-            node.get_logger().info("Executing landing sequence...")
+            # Extract linear velocity
+            lin = robot_tools.latest_twist.linear
             
-            # Create velocity publisher if it doesn't exist
-            if not hasattr(node, 'cmd_vel_publisher'):
-                node.cmd_vel_publisher = node.create_publisher(
-                    Twist,
-                    '/drone/mavros/setpoint_velocity/cmd_vel',
-                    10
-                )
+            # Extract angular velocity
+            ang = robot_tools.latest_twist.angular
             
-            # Mark landing as active and store start time
-            node.landing_active = True
-            node.landing_start_time = time.time()
-            
-            # Try to switch to land mode (as a background attempt)
-            try:
-                mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
-                if mode_client.wait_for_service(timeout_sec=1.0):
-                    mode_request = SetMode.Request()
-                    mode_request.custom_mode = "AUTO.LAND"
-                    mode_client.call_async(mode_request)
-                    node.get_logger().info("Land mode request sent")
-            except Exception as e:
-                node.get_logger().warning(f"Mode switch failed: {str(e)}")
-            
-            # Create a dedicated thread for controlled descent using velocity commands
-            def controlled_descent():
-                try:
-                    # Use debug level for most logs to prevent terminal disruption
-                    node.get_logger().debug("Starting controlled descent...")
-                    
-                    # Initialize descent velocity command
-                    vel_cmd = Twist()
-                    vel_cmd.linear.z = -0.5  # Descend at 0.5 m/s
-                    
-                    # Get control rate for sleep calculations
-                    control_rate = 10.0  # Hz
-                    if hasattr(node, 'control_rate'):
-                        control_rate = node.control_rate
-                    sleep_time = 1.0 / control_rate
-                    
-                    # Minimum altitude to consider "landed"
-                    min_altitude = 0.15  # meters
-                    
-                    # Maximum time for landing (safety timeout)
-                    max_landing_time = 120.0  # seconds
-                    start_time = time.time()
-                    last_log_time = 0  # For throttling log messages
-                    
-                    # Start descent loop
-                    while node.running and node.landing_active:
-                        # Get current altitude if available
-                        current_alt = 0
-                        try:
-                            if hasattr(node, 'current_pose') and hasattr(node.current_pose, 'pose'):
-                                current_alt = node.current_pose.pose.position.z
-                        except Exception:
-                            pass  # Use default if any error
-                        
-                        # Throttled logging (once every 10 seconds)
-                        current_time = time.time()
-                        if current_time - last_log_time > 10:
-                            node.get_logger().debug(f"Current altitude: {current_alt:.2f}m")
-                            last_log_time = current_time
-                        
-                        # Check if we're already at the ground
-                        if current_alt <= min_altitude:
-                            node.get_logger().info(f"Landed! Current altitude: {current_alt:.2f}m")
-                            # Send stop command to ensure motors off
-                            stop_cmd = Twist()
-                            for _ in range(5):
-                                node.cmd_vel_publisher.publish(stop_cmd)
-                                time.sleep(0.05)
-                            break
-                        
-                        # Adjust velocity based on altitude (slow down near ground)
-                        if current_alt < 1.0:
-                            vel_cmd.linear.z = -0.2  # Slower descent near ground
-                        else:
-                            vel_cmd.linear.z = -0.5  # Normal descent
-                        
-                        # Send descent command
-                        node.cmd_vel_publisher.publish(vel_cmd)
-                        
-                        # Check timeout
-                        if time.time() - start_time > max_landing_time:
-                            node.get_logger().warning("Landing timeout exceeded, stopping descent")
-                            # Send stop command
-                            stop_cmd = Twist()
-                            node.cmd_vel_publisher.publish(stop_cmd)
-                            break
-                        
-                        # Sleep for control interval
-                        time.sleep(sleep_time)
-                    
-                    # Final stop command to ensure motors off
-                    stop_cmd = Twist()
-                    for _ in range(5):
-                        node.cmd_vel_publisher.publish(stop_cmd)
-                        time.sleep(0.05)
-                    
-                    node.get_logger().info("Controlled descent completed")
-                    
-                except Exception as e:
-                    node.get_logger().error(f"Error in landing thread: {e}")
-                finally:
-                    # Always mark landing as inactive when done
-                    node.landing_active = False
-            
-            # Create and start the thread
-            landing_thread = threading.Thread(target=controlled_descent)
-            landing_thread.daemon = True
-            landing_thread.start()
-            
+            # Format the response
             return (
-                f"LANDING procedure initiated.\n\n"
-                f"• Method: Controlled velocity descent\n"
-                f"• The drone is now descending toward the ground at a safe speed\n\n"
-                f"Landing should complete shortly. You can issue another command once landing completes."
+                f"Drone Velocity:\n"
+                f"Linear (m/s):\n"
+                f"  x: {lin.x:.2f}\n"
+                f"  y: {lin.y:.2f}\n"
+                f"  z: {lin.z:.2f} (vertical)\n"
+                f"Angular (rad/s):\n"
+                f"  x: {ang.x:.2f} (roll rate)\n"
+                f"  y: {ang.y:.2f} (pitch rate)\n"
+                f"  z: {ang.z:.2f} (yaw rate)"
             )
-                        ######################## Landing Tool Ends ########################
-
-
-        # Return the tools
+        
+        # Return all tools
         return [
-                takeoff,
-                land]
+            get_drone_pose,
+            get_drone_velocity
+        ]
