@@ -114,14 +114,14 @@ class Ros2AgentNode(Node):
         # Initialize LLM
         local_llm = initialize_llm(self.llm_model)
         
-        # Create tools with MAVROS topic parameters
-        robot_tools = RobotTools(
-            node=self,
-            state_topic=self.state_topic,
-            arming_service=self.arming_service,
-            mode_service=self.mode_service,
-            setpoint_topic=self.setpoint_topic
-        )
+        # Create tools - use positional arguments to ensure compatibility
+        # Pass all the topics/services through the node instead
+        self.state_topic = self.state_topic  # Store for robot tools to access
+        self.arming_service = self.arming_service  # Store for robot tools to access
+        self.mode_service = self.mode_service  # Store for robot tools to access
+        self.setpoint_topic = self.setpoint_topic  # Store for robot tools to access
+        
+        robot_tools = RobotTools(self)  # Only pass the node itself
         tools = robot_tools.create_tools()
         
         # Create prompts

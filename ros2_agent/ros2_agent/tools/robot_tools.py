@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Robot tools for the ROSA Agent.
-This module contains tools for drone control, limited to takeoff only.
+This module contains tools for drone control, including takeoff and landing.
 """
 
 import time
 import threading
+import math
 from geometry_msgs.msg import PoseStamped
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode  # type: ignore
@@ -15,22 +16,20 @@ from mavros_msgs.msg import State  # type: ignore
 class RobotTools:
     """Collection of tools for robot control."""
     
-    def __init__(self, node, state_topic, arming_service, mode_service, setpoint_topic):
+    def __init__(self, node):
         """
         Initialize the RobotTools with necessary ROS topics and services.
         
         Args:
             node: The ROS2 node object
-            state_topic: Topic for drone state information
-            arming_service: Service for arming the drone
-            mode_service: Service for setting flight mode
-            setpoint_topic: Topic for publishing position setpoints
         """
         self.node = node
-        self.state_topic = state_topic
-        self.arming_service = arming_service
-        self.mode_service = mode_service
-        self.setpoint_topic = setpoint_topic
+        
+        # Get topic/service names from the node
+        self.state_topic = node.state_topic
+        self.arming_service = node.arming_service
+        self.mode_service = node.mode_service
+        self.setpoint_topic = node.setpoint_topic
         
         # Initialize state subscriber if it doesn't exist
         if not hasattr(node, 'state_sub'):
@@ -307,7 +306,7 @@ class RobotTools:
         @tool
         def land() -> str:
             """
-            Command the drone to land using the AUTO.LAND flight mode.
+            Command the drone to land using the LAND flight mode.
             
             This uses the flight controller's built-in landing sequence,
             which provides a controlled descent and automatic motor shutdown
@@ -340,12 +339,12 @@ class RobotTools:
             if not node.mode_client.wait_for_service(timeout_sec=timeout):
                 return f"Set mode service {mode_service} not available. Landing aborted."
             
-            # Request mode change to AUTO.LAND
-            node.get_logger().info(f"Setting AUTO.LAND mode for autonomous landing...")
+            # Request mode change to LAND
+            node.get_logger().info(f"Setting LAND mode for autonomous landing...")
             
             try:
                 mode_request = SetMode.Request()
-                mode_request.custom_mode = "AUTO.LAND"
+                mode_request.custom_mode = "LAND"  # PX4 uses "LAND" not "AUTO.LAND"
                 
                 future = node.mode_client.call_async(mode_request)
                 
@@ -359,12 +358,12 @@ class RobotTools:
                 
                 mode_response = future.result()
                 if not mode_response.mode_sent:
-                    return "Failed to set AUTO.LAND mode. Landing process failed."
+                    return "Failed to set LAND mode. Landing process failed."
                 
-                node.get_logger().info("AUTO.LAND mode set successfully, drone is now landing autonomously")
+                node.get_logger().info("LAND mode set successfully, drone is now landing autonomously")
             except Exception as e:
                 node.get_logger().error(f"Mode setting failed with error: {str(e)}")
-                return f"Setting AUTO.LAND mode failed with error: {str(e)}"
+                return f"Setting LAND mode failed with error: {str(e)}"
             
             # Start landing monitor thread if not already running
             if not hasattr(node, 'landing_monitor_thread') or not node.landing_monitor_thread.is_alive():
@@ -417,10 +416,10 @@ class RobotTools:
             
             return (
                 f"Landing sequence initiated successfully!\n\n"
-                f"• AUTO.LAND mode activated\n"
+                f"• LAND mode activated\n"
                 f"• Starting altitude: {current_alt:.1f}m\n"
                 f"• Landing control handled by flight controller\n\n"
-                f"The drone is now descending for landing. Progress will be reported until touchdown."
+                f"The drone is now descending for landing. Progress will be monitored automatically."
             )
         
                     ######################## Landing Tool Ends ########################
