@@ -261,7 +261,7 @@ class RobotTools:
                     success_count = 0
                     target_z = altitude
                     start_time = time.time()
-                    max_wait_time = 60  # seconds
+                    max_wait_time = 20  # seconds
                     
                     while node.running and time.time() - start_time < max_wait_time:
                         if hasattr(node, 'current_pose'):
