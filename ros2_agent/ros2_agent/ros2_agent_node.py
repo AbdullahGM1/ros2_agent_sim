@@ -42,7 +42,7 @@ class Ros2AgentNode(Node):
         """Declare and get all ROS parameters."""
         # Drone parameters
         self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
-        self.declare_parameter('control_rate', 20.0)  # Hz
+        self.declare_parameter('control_rate', 20.0)# Hz
         self.declare_parameter('llm_model', 'qwen3:8b')
         
         # Get parameters
