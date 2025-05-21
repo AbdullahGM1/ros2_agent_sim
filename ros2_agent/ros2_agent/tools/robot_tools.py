@@ -156,10 +156,10 @@ class RobotTools:
                         
             # Step 7: Start continuous setpoint publishing if not already running
             if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
-                # Initialize the control flag if it doesn't exist
-                if not hasattr(node, 'publish_setpoints'):
-                    node.publish_setpoints = True
-                
+                # Always ensure the setpoint publishing is enabled
+                node.publish_setpoints = True
+                node.get_logger().info("Enabled position control for takeoff")
+                                
                 def setpoint_publisher_thread():
                     """Thread that publishes position commands at 10Hz to maintain drone control"""
                     rate = node.create_rate(10)  # 10 Hz publication rate
