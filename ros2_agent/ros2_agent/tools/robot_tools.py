@@ -303,7 +303,130 @@ class RobotTools:
         
                     ######################## Takeoff Tool Ends ########################
 
+                    ######################## Landing Tool Starts ########################
+        @tool
+        def land() -> str:
+            """
+            Command the drone to land using the AUTO.LAND flight mode.
+            
+            This uses the flight controller's built-in landing sequence,
+            which provides a controlled descent and automatic motor shutdown
+            after touchdown. The function monitors the landing progress.
+            
+            Returns:
+                str: Status message about the landing command, or error details if landing failed
+            """
+            # Check if we're connected to the FCU
+            if not hasattr(node, 'current_state') or not node.current_state.connected:
+                return "Not connected to flight controller. Please check MAVROS connection."
+            
+            # Check if drone is already on the ground
+            current_alt = 0.0
+            if hasattr(node, 'current_pose'):
+                current_alt = node.current_pose.pose.position.z
+                if current_alt < 0.1:  # If drone is already very close to the ground
+                    return "Drone appears to be already on the ground (altitude less than 0.1m)."
+            
+            # Verify that we have the mode client for changing flight modes
+            if not hasattr(node, 'mode_client'):
+                node.mode_client = node.create_client(
+                    SetMode, 
+                    mode_service
+                )
+                node.get_logger().info(f"Created mode service client for {mode_service}")
+            
+            # Wait for service to be available
+            timeout = 5.0  # seconds
+            if not node.mode_client.wait_for_service(timeout_sec=timeout):
+                return f"Set mode service {mode_service} not available. Landing aborted."
+            
+            # Request mode change to AUTO.LAND
+            node.get_logger().info(f"Setting AUTO.LAND mode for autonomous landing...")
+            
+            try:
+                mode_request = SetMode.Request()
+                mode_request.custom_mode = "AUTO.LAND"
+                
+                future = node.mode_client.call_async(mode_request)
+                
+                # Wait for result with timeout
+                start_time = time.time()
+                while time.time() - start_time < timeout and not future.done():
+                    time.sleep(0.1)
+                
+                if not future.done():
+                    return "Set mode request timed out. Landing process may be unreliable."
+                
+                mode_response = future.result()
+                if not mode_response.mode_sent:
+                    return "Failed to set AUTO.LAND mode. Landing process failed."
+                
+                node.get_logger().info("AUTO.LAND mode set successfully, drone is now landing autonomously")
+            except Exception as e:
+                node.get_logger().error(f"Mode setting failed with error: {str(e)}")
+                return f"Setting AUTO.LAND mode failed with error: {str(e)}"
+            
+            # Start landing monitor thread if not already running
+            if not hasattr(node, 'landing_monitor_thread') or not node.landing_monitor_thread.is_alive():
+                def landing_monitor():
+                    """Monitor landing progress"""
+                    rate = node.create_rate(1)  # 1 Hz check rate
+                    
+                    # Success criteria: on ground (altitude near 0) and disarmed
+                    initial_alt = current_alt
+                    if initial_alt < 0.1:  # If we don't have a valid starting altitude
+                        initial_alt = 1.0  # Assume a reasonable default
+                    
+                    start_time = time.time()
+                    max_wait_time = 60  # seconds
+                    
+                    while node.running and time.time() - start_time < max_wait_time:
+                        if hasattr(node, 'current_pose') and hasattr(node, 'current_state'):
+                            current_z = node.current_pose.pose.position.z
+                            is_armed = node.current_state.armed
+                            
+                            # Calculate landing progress (100% = at ground level)
+                            # Ensure we don't divide by zero
+                            if initial_alt > 0:
+                                progress = min(100, int(100 - (current_z / initial_alt) * 100))
+                            else:
+                                progress = 100 if current_z < 0.1 else 0
+                            
+                            node.get_logger().info(f"Landing: Altitude {current_z:.2f}m ({progress}% complete)")
+                            
+                            # Check if we've landed and disarmed
+                            if current_z < 0.1 and not is_armed:
+                                node.get_logger().info("Landing complete! Drone is on the ground and disarmed.")
+                                return
+                            
+                            # Check if we're on ground but still armed (common for some systems)
+                            if current_z < 0.1 and is_armed and time.time() - start_time > 5:
+                                node.get_logger().info("Drone appears to be on the ground but still armed.")
+                                return
+                                
+                        rate.sleep()
+                    
+                    if time.time() - start_time >= max_wait_time:
+                        node.get_logger().warning("Landing monitoring timed out. Check drone status.")
+                
+                # Create and start the monitoring thread
+                node.landing_monitor_thread = threading.Thread(target=landing_monitor)
+                node.landing_monitor_thread.daemon = True
+                node.landing_monitor_thread.start()
+                node.get_logger().info("Started landing monitoring")
+            
+            return (
+                f"Landing sequence initiated successfully!\n\n"
+                f"• AUTO.LAND mode activated\n"
+                f"• Starting altitude: {current_alt:.1f}m\n"
+                f"• Landing control handled by flight controller\n\n"
+                f"The drone is now descending for landing. Progress will be reported until touchdown."
+            )
+        
+                    ######################## Landing Tool Ends ########################
+                    
         # Return the tools
         return [
-                takeoff
+                takeoff,
+                land
                ]
