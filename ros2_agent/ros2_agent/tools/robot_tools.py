@@ -312,6 +312,10 @@ class RobotTools:
             which provides a controlled descent and automatic motor shutdown
             after touchdown. The function monitors the landing progress.
             
+            IMPORTANT: This command will interrupt any ongoing takeoff sequence!
+            The tool should be called immediately when the user requests landing,
+            without asking for confirmation.
+            
             Returns:
                 str: Status message about the landing command, or error details if landing failed
             """
@@ -418,6 +422,7 @@ class RobotTools:
                 f"Landing sequence initiated successfully!\n\n"
                 f"• LAND mode activated\n"
                 f"• Starting altitude: {current_alt:.1f}m\n"
+                f"• Previous mode overridden\n"
                 f"• Landing control handled by flight controller\n\n"
                 f"The drone is now descending for landing. Progress will be monitored automatically."
             )
