@@ -513,13 +513,24 @@ class RobotTools:
                             if current_z < 0.1 and is_armed and time.time() - start_time > 5:
                                 node.get_logger().info("Drone appears to be on the ground but still armed.")
                                 result_message[0] = (
-                                    f"Landing mostly complete.\n\n"
+                                    f"Landing completed!\n\n"
                                     f"• Drone is on the ground\n"
-                                    f"• Motors still armed\n"
+                                    f"• Motors still armed (normal for some systems)\n"
                                     f"• Final altitude: {current_z:.2f}m\n\n"
-                                    f"The drone has landed but the motors remain armed. This is normal for some flight controllers."
+                                    f"The drone has landed successfully. The motors remaining armed is normal for some flight controllers."
                                 )
                                 operation_completed.set()
+                                
+                                # Attempt disarming if possible (optional)
+                                try:
+                                    if hasattr(node, 'arming_client'):
+                                        node.get_logger().info("Attempting to disarm motors...")
+                                        arm_request = CommandBool.Request()
+                                        arm_request.value = False
+                                        node.arming_client.call_async(arm_request)
+                                except Exception as e:
+                                    node.get_logger().warning(f"Optional disarm attempt failed: {str(e)}")
+                                    
                                 return
                                 
                         rate.sleep()
@@ -541,16 +552,30 @@ class RobotTools:
                 node.get_logger().info("Started landing monitoring")
                 
                 # Wait for operation to complete with a timeout
-                wait_success = operation_completed.wait(timeout=60)  # Wait for up to 60 seconds for landing
+                max_wait_time = 60  # Maximum wait time in seconds
+                wait_interval = 2.0  # Check every 2 seconds
+                start_wait = time.time()
                 
-                if not wait_success:
-                    # If event wasn't set, we hit the wait timeout
-                    result_message[0] = (
-                        f"Landing initiated but monitoring thread didn't complete in time.\n\n"
-                        f"• Landing mode activated successfully\n"
-                        f"• Please check drone status\n\n"
-                        f"The drone may still be in the process of landing."
-                    )
+                # More responsive waiting loop
+                while not operation_completed.is_set() and time.time() - start_wait < max_wait_time:
+                    # Use shorter wait intervals so we can check more frequently
+                    wait_success = operation_completed.wait(timeout=wait_interval)
+                    if wait_success:
+                        break
+                    
+                    # Check if we're at ground level but monitoring hasn't finished
+                    if hasattr(node, 'current_pose') and hasattr(node, 'current_state'):
+                        current_z = node.current_pose.pose.position.z
+                        if current_z < 0.1:
+                            node.get_logger().info("Ground level detected during wait - proceeding with result")
+                            if result_message[0] == "Landing in progress":
+                                result_message[0] = (
+                                    f"Landing completed!\n\n"
+                                    f"• Drone is on the ground\n"
+                                    f"• Final altitude: {current_z:.2f}m\n\n"
+                                    f"The drone has landed successfully."
+                                )
+                            break
                 
                 # Return the message from the monitor thread
                 return result_message[0]
