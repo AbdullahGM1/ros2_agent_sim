@@ -6,24 +6,37 @@ This module contains tools for drone control, limited to takeoff only.
 
 import time
 import threading
-import math
 from geometry_msgs.msg import PoseStamped
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode  # type: ignore
-from mavros_msgs.msg import State # type: ignore
+from mavros_msgs.msg import State  # type: ignore
 
 
 class RobotTools:
     """Collection of tools for robot control."""
     
-    def __init__(self, node):
+    def __init__(self, node, state_topic, arming_service, mode_service, setpoint_topic):
+        """
+        Initialize the RobotTools with necessary ROS topics and services.
+        
+        Args:
+            node: The ROS2 node object
+            state_topic: Topic for drone state information
+            arming_service: Service for arming the drone
+            mode_service: Service for setting flight mode
+            setpoint_topic: Topic for publishing position setpoints
+        """
         self.node = node
+        self.state_topic = state_topic
+        self.arming_service = arming_service
+        self.mode_service = mode_service
+        self.setpoint_topic = setpoint_topic
         
         # Initialize state subscriber if it doesn't exist
         if not hasattr(node, 'state_sub'):
             node.state_sub = node.create_subscription(
                 State,
-                '/drone/mavros/state',
+                self.state_topic,
                 self._state_callback,
                 10
             )
@@ -39,8 +52,11 @@ class RobotTools:
     def create_tools(self):
         """Create and return all robot tools."""
         
-        # Reference to the node for use in the closure
+        # Reference to the node and topic variables for use in the closure
         node = self.node
+        arming_service = self.arming_service
+        mode_service = self.mode_service
+        setpoint_topic = self.setpoint_topic
         
                     ######################## Takeoff Tool Starts ########################
 
@@ -92,32 +108,33 @@ class RobotTools:
             if not hasattr(node, 'arming_client'):
                 node.arming_client = node.create_client(
                     CommandBool, 
-                    '/drone/mavros/cmd/arming'
+                    arming_service
                 )
-                node.get_logger().info("Created arming service client")
+                node.get_logger().info(f"Created arming service client for {arming_service}")
                 
             if not hasattr(node, 'mode_client'):
                 node.mode_client = node.create_client(
                     SetMode, 
-                    '/drone/mavros/set_mode'
+                    mode_service
                 )
-                node.get_logger().info("Created mode service client")
+                node.get_logger().info(f"Created mode service client for {mode_service}")
             
             # Wait for services to be available
             timeout = 5.0  # seconds
             if not node.arming_client.wait_for_service(timeout_sec=timeout):
-                return "Arming service not available. Takeoff aborted."
+                return f"Arming service {arming_service} not available. Takeoff aborted."
             
             if not node.mode_client.wait_for_service(timeout_sec=timeout):
-                return "Set mode service not available. Takeoff aborted."
+                return f"Set mode service {mode_service} not available. Takeoff aborted."
             
             # Step 2: Create a setpoint publisher for position control if it doesn't exist
             if not hasattr(node, 'setpoint_pub'):
                 node.setpoint_pub = node.create_publisher(
                     PoseStamped,
-                    '/drone/mavros/setpoint_position/local',
+                    setpoint_topic,
                     10
                 )
+                node.get_logger().info(f"Created setpoint publisher for {setpoint_topic}")
             
             # Create setpoint with target altitude but keep current horizontal position
             setpoint = PoseStamped()

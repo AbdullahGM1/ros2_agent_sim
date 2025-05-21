@@ -40,20 +40,33 @@ class Ros2AgentNode(Node):
 
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
-        # Drone parameters
-        self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
-        self.declare_parameter('control_rate', 20.0)# Hz
+        # LLM & Agent parameters
+        self.declare_parameter('control_rate', 20.0)  # Hz
         self.declare_parameter('llm_model', 'qwen3:8b')
         
+        # MAVROS topic parameters
+        self.declare_parameter('state_topic', '/drone/mavros/state')
+        self.declare_parameter('arming_service', '/drone/mavros/cmd/arming')
+        self.declare_parameter('mode_service', '/drone/mavros/set_mode')
+        self.declare_parameter('setpoint_topic', '/drone/mavros/setpoint_position/local')
+        
         # Get parameters
-        self.odom_topic = self.get_parameter('odom_topic').value
         self.control_rate = self.get_parameter('control_rate').value
         self.llm_model = self.get_parameter('llm_model').value
         
+        # Get MAVROS parameters
+        self.state_topic = self.get_parameter('state_topic').value
+        self.arming_service = self.get_parameter('arming_service').value
+        self.mode_service = self.get_parameter('mode_service').value
+        self.setpoint_topic = self.get_parameter('setpoint_topic').value
+        
         # Log parameters
-        self.get_logger().info(f"Odom topic: {self.odom_topic}")
         self.get_logger().info(f"Control rate: {self.control_rate}")
         self.get_logger().info(f"Using LLM model: {self.llm_model}")
+        self.get_logger().info(f"State topic: {self.state_topic}")
+        self.get_logger().info(f"Arming service: {self.arming_service}")
+        self.get_logger().info(f"Mode service: {self.mode_service}")
+        self.get_logger().info(f"Setpoint topic: {self.setpoint_topic}")
     
     def _initialize_node(self):
         """Initialize node components."""
@@ -99,8 +112,14 @@ class Ros2AgentNode(Node):
         # Initialize LLM
         local_llm = initialize_llm(self.llm_model)
         
-        # Create tools
-        robot_tools = RobotTools(self)
+        # Create tools with MAVROS topic parameters
+        robot_tools = RobotTools(
+            node=self,
+            state_topic=self.state_topic,
+            arming_service=self.arming_service,
+            mode_service=self.mode_service,
+            setpoint_topic=self.setpoint_topic
+        )
         tools = robot_tools.create_tools()
         
         # Create prompts
