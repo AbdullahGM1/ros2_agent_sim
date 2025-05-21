@@ -193,9 +193,6 @@ class RobotTools:
         
                     ######################## Takeoff Tool Ends ########################
 
-
-
-                   
         # Return the tools
         return [
                 takeoff
