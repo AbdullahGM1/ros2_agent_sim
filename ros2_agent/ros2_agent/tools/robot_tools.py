@@ -346,6 +346,12 @@ class RobotTools:
             # Request mode change to LAND
             node.get_logger().info(f"Setting LAND mode for autonomous landing...")
             
+            # Important: Stop the setpoint publisher before switching modes
+            if hasattr(node, 'publish_setpoints'):
+                node.get_logger().info("Stopping position control setpoint publishing...")
+                node.publish_setpoints = False  # This will stop the thread from publishing
+                time.sleep(0.5)  # Brief pause to ensure publishing stops
+            
             try:
                 mode_request = SetMode.Request()
                 mode_request.custom_mode = "LAND"  # PX4 uses "LAND" not "AUTO.LAND"
@@ -420,6 +426,7 @@ class RobotTools:
             
             return (
                 f"Landing sequence initiated successfully!\n\n"
+                f"• Position control disabled\n"
                 f"• LAND mode activated\n"
                 f"• Starting altitude: {current_alt:.1f}m\n"
                 f"• Previous mode overridden\n"
