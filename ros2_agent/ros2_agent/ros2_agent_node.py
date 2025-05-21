@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Main entry point for the ISAR System Control ROS2 Agent."""
+"""Main entry point for the ROS2 Agent for drone control."""
 
 import rclpy
 import threading
@@ -26,9 +26,7 @@ class Ros2AgentNode(Node):
         
         # ============================= PARAMETERS =============================
         self._declare_and_get_parameters()
-
-        #To see the parameters in the terminal
-        time.sleep(2)
+        
         # ============================= INITIALIZE NODE =============================
         self._initialize_node()
         
@@ -36,12 +34,10 @@ class Ros2AgentNode(Node):
         self.setup_agent()
         
         self.get_logger().info("Drone Agent is ready. Type a command:")
-        time.sleep(2)
 
     def _declare_and_get_parameters(self):
         """Declare and get all ROS parameters."""
-        # LLM & Agent parameters
-        self.declare_parameter('control_rate', 20.0)  # Hz
+        # LLM parameter
         self.declare_parameter('llm_model', 'qwen3:8b')
         
         # MAVROS topic parameters
@@ -52,7 +48,6 @@ class Ros2AgentNode(Node):
         self.declare_parameter('setpoint_topic', '/drone/mavros/setpoint_position/local')
         
         # Get parameters
-        self.control_rate = self.get_parameter('control_rate').value
         self.llm_model = self.get_parameter('llm_model').value
         
         # Get MAVROS parameters
@@ -63,9 +58,8 @@ class Ros2AgentNode(Node):
         self.setpoint_topic = self.get_parameter('setpoint_topic').value
         
         # Log parameters
-        self.get_logger().info(f"Odom topic: {self.odom_topic}")
-        self.get_logger().info(f"Control rate: {self.control_rate}")
         self.get_logger().info(f"Using LLM model: {self.llm_model}")
+        self.get_logger().info(f"Odom topic: {self.odom_topic}")
         self.get_logger().info(f"State topic: {self.state_topic}")
         self.get_logger().info(f"Arming service: {self.arming_service}")
         self.get_logger().info(f"Mode service: {self.mode_service}")
@@ -88,6 +82,11 @@ class Ros2AgentNode(Node):
             self.pose_callback,
             self.qos_sensor
         )
+        
+        # Initialize camera lock for CLI (required by emergency_stop)
+        self.camera_lock = threading.Lock()
+        self.camera_active = False
+        self.camera_thread = None
         
         # State variables
         self.current_pose = PoseStamped()
