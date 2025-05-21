@@ -189,20 +189,17 @@ class RobotTools:
             )
             
         @tool
-        def land(timeout: float = 60.0) -> str:
+        def land() -> str:
             """
-            Command the drone to land at the current location with verification.
+            Command the drone to land at the current location using MAVROS.
             
-            This will switch the drone to AUTO.LAND mode and actively monitor the
-            drone's altitude until landing is confirmed or timeout is reached.
-            
-            Args:
-                timeout: Maximum time in seconds to wait for landing (default: 60.0)
+            This will switch the drone to AUTO.LAND mode for a controlled landing sequence.
+            The drone will descend to the ground while maintaining its horizontal position.
             
             Returns:
-                str: Status message about the landing process
+                str: Status message about the landing command, or error details if it failed
             """
-            node.get_logger().info("Initiating landing sequence with verification...")
+            node.get_logger().info("Initiating landing sequence...")
             
             # Check that mode client exists
             if not hasattr(node, 'mode_client'):
@@ -213,21 +210,20 @@ class RobotTools:
                 node.get_logger().info("Created mode service client")
             
             # Wait for service to be available
-            service_timeout = 5.0  # seconds
-            if not node.mode_client.wait_for_service(timeout_sec=service_timeout):
+            timeout = 5.0  # seconds
+            if not node.mode_client.wait_for_service(timeout_sec=timeout):
                 return "Set mode service not available. Landing aborted."
             
-            # Get initial altitude
-            initial_altitude = node.current_pose.pose.position.z
-            node.get_logger().info(f"Current altitude before landing: {initial_altitude:.2f}m")
+            # Disable setpoint publishing
+            node.publish_setpoints = False  # Force to False regardless of previous state
+            node.get_logger().info("Disabled position control for landing")
             
-            if initial_altitude < 0.1:
-                return "Drone appears to be already on the ground (altitude < 0.1m)."
+            # Add a brief pause to ensure the change takes effect
+            time.sleep(0.2)
             
-            # Disable setpoint publishing (if active)
-            if hasattr(node, 'publish_setpoints'):
-                node.publish_setpoints = False
-                node.get_logger().info("Disabled position control for landing")
+            # Verify the flag was set properly (for debugging)
+            node.get_logger().info(f"Position control flag set to: {getattr(node, 'publish_setpoints', False)}")
+
             
             # Set mode to AUTO.LAND
             node.get_logger().info("Setting AUTO.LAND mode...")
@@ -240,7 +236,7 @@ class RobotTools:
                 
                 # Wait for result with timeout
                 start_time = time.time()
-                while time.time() - start_time < service_timeout and not future.done():
+                while time.time() - start_time < timeout and not future.done():
                     time.sleep(0.1)
                 
                 if not future.done():
@@ -255,57 +251,12 @@ class RobotTools:
                 node.get_logger().error(f"Setting AUTO.LAND mode failed with error: {str(e)}")
                 return f"Landing failed with error: {str(e)}"
             
-            # Monitor landing progress
-            start_time = time.time()
-            last_altitude = initial_altitude
-            progress_updates = []
-            
-            while time.time() - start_time < timeout:
-                current_altitude = node.current_pose.pose.position.z
-                
-                # If altitude hasn't changed in 5 seconds and is near zero, consider landing complete
-                if abs(current_altitude - last_altitude) < 0.05 and current_altitude < 0.2:
-                    landing_success = True
-                    break
-                
-                # Log progress every 1m of descent
-                if last_altitude - current_altitude > 1.0:
-                    progress_message = f"Descending: {current_altitude:.2f}m"
-                    node.get_logger().info(progress_message)
-                    progress_updates.append(progress_message)
-                    last_altitude = current_altitude
-                
-                time.sleep(1.0)
-            else:
-                # Timeout occurred
-                current_altitude = node.current_pose.pose.position.z
-                if current_altitude < 0.5:
-                    landing_success = True
-                else:
-                    return (
-                        f"Landing timeout after {timeout:.1f} seconds.\n"
-                        f"Current altitude: {current_altitude:.2f}m (started at {initial_altitude:.2f}m).\n"
-                        f"The drone may still be in the process of landing."
-                    )
-            
-            # Verify landing completed
-            final_altitude = node.current_pose.pose.position.z
-            descent_amount = initial_altitude - final_altitude
-            
-            landing_status = (
-                f"Landing sequence completed!\n\n"
-                f"• Starting altitude: {initial_altitude:.2f}m\n"
-                f"• Current altitude: {final_altitude:.2f}m\n"
-                f"• Descent amount: {descent_amount:.2f}m\n"
-                f"• Mode: AUTO.LAND\n\n"
+            return (
+                f"Landing sequence initiated successfully!\n\n"
+                f"• Mode: AUTO.LAND\n"
+                f"• The drone should now be descending to land at the current location.\n\n"
+                f"The drone will automatically disarm upon landing."
             )
-            
-            if final_altitude < 0.2:
-                landing_status += "The drone has successfully landed and should auto-disarm."
-            else:
-                landing_status += f"WARNING: Drone altitude is still {final_altitude:.2f}m above ground!"
-            
-            return landing_status
         
         # Return the tools
         return [
