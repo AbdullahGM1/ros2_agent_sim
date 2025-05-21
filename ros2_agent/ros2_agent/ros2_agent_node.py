@@ -45,6 +45,7 @@ class Ros2AgentNode(Node):
         self.declare_parameter('llm_model', 'qwen3:8b')
         
         # MAVROS topic parameters
+        self.declare_parameter('odom_topic', '/drone/mavros/local_position/pose')
         self.declare_parameter('state_topic', '/drone/mavros/state')
         self.declare_parameter('arming_service', '/drone/mavros/cmd/arming')
         self.declare_parameter('mode_service', '/drone/mavros/set_mode')
@@ -55,12 +56,14 @@ class Ros2AgentNode(Node):
         self.llm_model = self.get_parameter('llm_model').value
         
         # Get MAVROS parameters
+        self.odom_topic = self.get_parameter('odom_topic').value
         self.state_topic = self.get_parameter('state_topic').value
         self.arming_service = self.get_parameter('arming_service').value
         self.mode_service = self.get_parameter('mode_service').value
         self.setpoint_topic = self.get_parameter('setpoint_topic').value
         
         # Log parameters
+        self.get_logger().info(f"Odom topic: {self.odom_topic}")
         self.get_logger().info(f"Control rate: {self.control_rate}")
         self.get_logger().info(f"Using LLM model: {self.llm_model}")
         self.get_logger().info(f"State topic: {self.state_topic}")
