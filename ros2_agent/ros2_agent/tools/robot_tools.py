@@ -214,7 +214,7 @@ class RobotTools:
             time.sleep(0.5)
             
             # 5. Monitor descent until COMPLETE landing
-            timeout = 45.0  # Allow up to 45 seconds for complete landing
+            timeout = 30.0  # Reduced from 45.0 seconds
             start_time = time.time()
             last_report_time = start_time
             descent_detected = False
@@ -236,13 +236,14 @@ class RobotTools:
                     descent_detected = True
                     node.get_logger().info(f"✅ Descent confirmed - continuing to ground level...")
                 
-                # Report progress every 3 seconds
-                if time.time() - last_report_time > 3.0:
+                # Report progress every 2 seconds (reduced from 3)
+                if time.time() - last_report_time > 2.0:
                     descent_amount = start_altitude - current_altitude
                     node.get_logger().info(f"Landing progress: {current_altitude:.2f}m (descended {descent_amount:.2f}m)")
                     last_report_time = time.time()
                 
-                time.sleep(1.0)
+                # Check more frequently (reduced from 1.0 to 0.5 seconds)
+                time.sleep(0.5)
             else:
                 # Timeout occurred - check final state
                 current_altitude = node.current_pose.pose.position.z
