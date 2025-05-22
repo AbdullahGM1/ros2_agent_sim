@@ -9,6 +9,8 @@ import threading
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode # type: ignore
 from geometry_msgs.msg import PoseStamped
+import math
+from std_msgs.msg import Float64
 
 
 class RobotTools:
@@ -339,10 +341,107 @@ class RobotTools:
             )
             
             return pose_info
-        
+
+
+        @tool
+        def control_gimbal(pitch: float = 0.0, roll: float = 0.0, yaw: float = 0.0, reset_to_origin: bool = False) -> str:
+            """
+            Control the drone's gimbal for camera positioning during SAR operations.
+            
+            Args:
+                pitch: Camera pitch angle in DEGREES (-135 to +45, negative = down)
+                roll: Camera roll angle in DEGREES (-45 to +45) 
+                yaw: Camera yaw angle in DEGREES (-180 to +180)
+                reset_to_origin: If True, resets gimbal to center position (overrides other params)
+            
+            Returns:
+                str: Status of gimbal control command
+            """
+            # Handle origin reset command
+            if reset_to_origin:
+                pitch, roll, yaw = 0.0, 0.0, 0.0
+                node.get_logger().info("Resetting gimbal to origin position (0°, 0°, 0°)")
+            else:
+                node.get_logger().info(f"Controlling gimbal: pitch={pitch}°, roll={roll}°, yaw={yaw}°")
+            
+            # 1. Validate gimbal limits based on SDF
+            if not (-135.0 <= pitch <= 45.0):
+                return f"Error: Pitch {pitch}° out of range (-135° to +45°)"
+            if not (-45.0 <= roll <= 45.0):
+                return f"Error: Roll {roll}° out of range (±45°)"
+            if not (-180.0 <= yaw <= 180.0):
+                return f"Error: Yaw {yaw}° out of practical range (±180°)"
+            
+            # 2. Create publishers (one-time creation)
+            try:
+                if not hasattr(node, 'gimbal_pitch_pub'):
+                    node.gimbal_pitch_pub = node.create_publisher(
+                        Float64, '/drone/gimbal/cmd_pitch', 10)
+                    node.get_logger().info("Created gimbal pitch publisher")
+                    
+                if not hasattr(node, 'gimbal_roll_pub'):
+                    node.gimbal_roll_pub = node.create_publisher(
+                        Float64, '/drone/gimbal/cmd_roll', 10)
+                    node.get_logger().info("Created gimbal roll publisher")
+                    
+                if not hasattr(node, 'gimbal_yaw_pub'):
+                    node.gimbal_yaw_pub = node.create_publisher(
+                        Float64, '/drone/gimbal/cmd_yaw', 10)
+                    node.get_logger().info("Created gimbal yaw publisher")
+            except Exception as e:
+                return f"Error creating gimbal publishers: {str(e)}"
+            
+            # 3. Convert degrees to radians with coordinate system corrections
+            pitch_rad = math.radians(-pitch)  # Invert pitch for intuitive up/down
+            roll_rad = math.radians(-roll)    # Invert roll for intuitive left/right tilt
+            yaw_rad = math.radians(-yaw)      # Invert yaw for intuitive left/right pan
+            
+            # 4. Create and publish Float64 messages
+            try:
+                # Pitch command
+                pitch_msg = Float64()
+                pitch_msg.data = pitch_rad
+                node.gimbal_pitch_pub.publish(pitch_msg)
+                
+                # Roll command  
+                roll_msg = Float64()
+                roll_msg.data = roll_rad
+                node.gimbal_roll_pub.publish(roll_msg)
+                
+                # Yaw command
+                yaw_msg = Float64()
+                yaw_msg.data = yaw_rad
+                node.gimbal_yaw_pub.publish(yaw_msg)
+                
+                node.get_logger().info(f"Gimbal commands sent: P={pitch_rad:.3f}rad, R={roll_rad:.3f}rad, Y={yaw_rad:.3f}rad")
+                
+            except Exception as e:
+                return f"Error publishing gimbal commands: {str(e)}"
+            
+            # 5. Return success status
+            if reset_to_origin:
+                return (
+                    f"✅ Gimbal reset to origin successful!\n\n"
+                    f"📐 Position reset:\n"
+                    f"  • Pitch: 0.0° (center)\n"
+                    f"  • Roll: 0.0° (level)\n"
+                    f"  • Yaw: 0.0° (forward)\n\n"
+                    f"🎥 Camera is now centered for forward SAR operations."
+                )
+            else:
+                return (
+                    f"✅ Gimbal control successful!\n\n"
+                    f"📐 Commands sent:\n"
+                    f"  • Pitch: {pitch:.1f}° ({pitch_rad:.3f} rad)\n"
+                    f"  • Roll: {roll:.1f}° ({roll_rad:.3f} rad)\n"
+                    f"  • Yaw: {yaw:.1f}° ({yaw_rad:.3f} rad)\n\n"
+                    f"🎥 Camera should now be positioned for SAR operations."
+                )
+                
         # Return the tools
         return [
             takeoff,
             land,
-            get_drone_pose
+            get_drone_pose,
+            control_gimbal
         ]
