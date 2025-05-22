@@ -40,6 +40,7 @@ def system_prompts() -> RobotSystemPrompts:
             "- If user says 'show camera', 'start camera', 'open camera', 'camera feed', 'show me what you see' → MUST call camera_feed with action='start' "
             "- If user says 'close camera', 'stop camera', 'close camera window', 'close feed', 'stop feed', 'turn off camera' → MUST call camera_feed with action='stop' "
             "- If user asks for gimbal control like 'point camera down', 'tilt camera', 'rotate camera' → MUST call control_gimbal tool "
+            "- If user says 'status', 'drone status', 'check status', 'battery status', 'system status', 'health check', 'ready for mission', 'operational status' → MUST call get_drone_status tool "
             "Never generate simulated responses for these commands. Always call the actual tool. "
             "For quadrupeds: Assess structural stability before entering buildings; retreat if signs of imminent collapse. "
             "For drones: Maintain safe distance from obstacles, especially in windy conditions or low visibility. "
