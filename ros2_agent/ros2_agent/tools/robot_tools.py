@@ -8,7 +8,7 @@ import time
 import threading
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode # type: ignore
-from mavros_msgs.msg import VFR_HUD, State # type: ignore
+from mavros_msgs.msg import VfrHud, State # type: ignore
 from geometry_msgs.msg import PoseStamped
 import math
 from std_msgs.msg import Float64
@@ -709,7 +709,7 @@ class RobotTools:
                     
                     if not hasattr(node, 'vfr_subscriber'):
                         node.vfr_subscriber = node.create_subscription(
-                            VFR_HUD, '/drone/mavros/vfr_hud', vfr_callback, 10)
+                            VfrHud, '/drone/mavros/vfr_hud', vfr_callback, 10)
                         node.get_logger().info("Created VFR HUD subscriber")
                         
                         # Wait briefly for data
