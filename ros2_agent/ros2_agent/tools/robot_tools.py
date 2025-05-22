@@ -28,229 +28,264 @@ class RobotTools:
             """
             Command the drone to take off to the specified altitude using MAVROS.
             
-            This will arm the drone, set OFFBOARD mode, and command it to ascend.
-            The function creates persistent service clients and publishers if they
-            don't already exist, and manages the continuous sending of setpoints.
-            
             Args:
                 altitude: Target altitude in meters (default: 5.0)
             
             Returns:
-                str: Status message about the takeoff command, or error details if the takeoff failed
+                str: Status message about the takeoff command
             """
-            # Validate altitude parameter
+            # 1. Input validation
             if altitude <= 0:
-                return "Invalid altitude. Please specify a positive value in meters."
+                return "Error: Altitude must be positive"
+            if altitude > 20:
+                return "Error: Altitude exceeds safe limit (20m max)"
             
-            if altitude > 30:
-                return "Requested altitude exceeds safe limits. Please specify an altitude below 30 meters."
+            # Get current position from the drone
+            current_x = node.current_pose.pose.position.x
+            current_y = node.current_pose.pose.position.y
+            current_z = node.current_pose.pose.position.z
             
-            node.get_logger().info(f"Initiating takeoff sequence to altitude {altitude}m...")
+            node.get_logger().info(f"Current position: ({current_x:.2f}, {current_y:.2f}, {current_z:.2f})")
+            node.get_logger().info(f"Taking off to: ({current_x:.2f}, {current_y:.2f}, {altitude:.2f})")
             
-            # Step 1: Create service clients for arming and mode setting (if they don't exist)
-            if not hasattr(node, 'arming_client'):
-                node.arming_client = node.create_client(
-                    CommandBool, 
-                    '/drone/mavros/cmd/arming'
-                )
-                node.get_logger().info("Created arming service client")
-                
-            if not hasattr(node, 'mode_client'):
-                node.mode_client = node.create_client(
-                    SetMode, 
-                    '/drone/mavros/set_mode'
-                )
-                node.get_logger().info("Created mode service client")
+            node.get_logger().info(f"Initiating takeoff to altitude {altitude}m...")
             
-            # Wait for services to be available
-            timeout = 5.0  # seconds
+            # 2. Create service clients with better error handling
+            try:
+                if not hasattr(node, 'arming_client'):
+                    node.arming_client = node.create_client(CommandBool, '/drone/mavros/cmd/arming')
+                    node.get_logger().info("Created arming service client")
+                    
+                if not hasattr(node, 'mode_client'):
+                    node.mode_client = node.create_client(SetMode, '/drone/mavros/set_mode')
+                    node.get_logger().info("Created mode service client")
+            except Exception as e:
+                return f"Error creating service clients: {str(e)}"
+            
+            # 3. Wait for services to be available
+            timeout = 5.0
             if not node.arming_client.wait_for_service(timeout_sec=timeout):
-                return "Arming service not available. Takeoff aborted."
-            
+                return "Error: Arming service not available"
             if not node.mode_client.wait_for_service(timeout_sec=timeout):
-                return "Set mode service not available. Takeoff aborted."
+                return "Error: Mode service not available"
             
-            # Step 2: Create a setpoint publisher for position control if it doesn't exist
+            # 4. Create setpoint publisher
             if not hasattr(node, 'setpoint_pub'):
                 node.setpoint_pub = node.create_publisher(
                     PoseStamped,
                     '/drone/mavros/setpoint_position/local',
                     10
                 )
+                node.get_logger().info("Created setpoint publisher")
             
-            # Create setpoint with target altitude
+            # 5. Create and send initial setpoints
             setpoint = PoseStamped()
             setpoint.header.frame_id = "map"
-            setpoint.pose.position.x = 0.0  # Use fixed position
-            setpoint.pose.position.y = 0.0  # Use fixed position
-            setpoint.pose.position.z = altitude  # Target altitude
-            
-            # Set orientation (identity quaternion - no rotation)
+            setpoint.pose.position.x = current_x
+            setpoint.pose.position.y = current_y
+            setpoint.pose.position.z = altitude
             setpoint.pose.orientation.w = 1.0
-            setpoint.pose.orientation.x = 0.0
-            setpoint.pose.orientation.y = 0.0
-            setpoint.pose.orientation.z = 0.0
             
-            # Step 3: Send a few setpoints before starting (required by MAVROS)
             node.get_logger().info("Sending initial setpoints...")
-            
             for i in range(10):
                 setpoint.header.stamp = node.get_clock().now().to_msg()
                 node.setpoint_pub.publish(setpoint)
                 time.sleep(0.1)
             
-            # Step 4: Request arming
+            # 6. Arm the drone with proper waiting
             node.get_logger().info("Requesting drone arming...")
-            
             try:
                 arm_request = CommandBool.Request()
                 arm_request.value = True
-                
                 future = node.arming_client.call_async(arm_request)
                 
-                # Wait for result with timeout
+                # Wait for arming response
                 start_time = time.time()
                 while time.time() - start_time < timeout and not future.done():
                     time.sleep(0.1)
                 
                 if not future.done():
-                    return "Arming request timed out. Takeoff aborted."
-                
+                    return "Error: Arming request timed out"
+                    
                 arm_response = future.result()
                 if not arm_response.success:
-                    return "Arming failed. Takeoff aborted."
-                
+                    return "Error: Failed to arm drone"
+                    
                 node.get_logger().info("Drone armed successfully")
             except Exception as e:
-                node.get_logger().error(f"Arming failed with error: {str(e)}")
-                return f"Arming failed with error: {str(e)}"
+                return f"Error during arming: {str(e)}"
             
-            # Step 5: Set mode to OFFBOARD
+            # 7. Set OFFBOARD mode with proper waiting
             node.get_logger().info("Setting OFFBOARD mode...")
-            
             try:
                 mode_request = SetMode.Request()
                 mode_request.custom_mode = "OFFBOARD"
-                
                 future = node.mode_client.call_async(mode_request)
                 
-                # Wait for result with timeout
+                # Wait for mode response
                 start_time = time.time()
                 while time.time() - start_time < timeout and not future.done():
                     time.sleep(0.1)
                 
                 if not future.done():
-                    return "Set mode request timed out. Takeoff process may be unreliable."
-                
+                    return "Error: Mode setting timed out"
+                    
                 mode_response = future.result()
                 if not mode_response.mode_sent:
-                    return "Failed to set OFFBOARD mode. Takeoff process may be unreliable."
-                
+                    return "Error: Failed to set OFFBOARD mode"
+                    
                 node.get_logger().info("OFFBOARD mode set successfully")
             except Exception as e:
-                node.get_logger().error(f"Mode setting failed with error: {str(e)}")
-                return f"Setting OFFBOARD mode failed with error: {str(e)}"
+                return f"Error setting mode: {str(e)}"
             
-            # Step 6: Store the current target setpoint on the node
+            # 8. Store setpoint and enable publishing
             node.target_setpoint = setpoint
-                        
-            # Step 7: Start continuous setpoint publishing if not already running
+            node.publish_setpoints = True
+            
+            # 9. Start setpoint publisher thread (improved)
             if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
-                # Initialize the control flag if it doesn't exist
-                if not hasattr(node, 'publish_setpoints'):
-                    node.publish_setpoints = True
-                
-                def setpoint_publisher_thread():
-                    """Thread that publishes position commands at 10Hz to maintain drone control"""
-                    rate = node.create_rate(10)  # 10 Hz publication rate
-                    
+                def setpoint_publisher():
+                    rate = node.create_rate(10)
                     while node.running:
-                        # Only publish when enabled and a target position exists
                         if getattr(node, 'publish_setpoints', False) and hasattr(node, 'target_setpoint'):
-                            # Update timestamp and publish the current target position
                             node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
                             node.setpoint_pub.publish(node.target_setpoint)
-                        
-                        # Sleep precisely to maintain 10Hz frequency
                         rate.sleep()
                 
-                # Create and start the publisher thread
-                node.setpoint_thread = threading.Thread(target=setpoint_publisher_thread)
-                node.setpoint_thread.daemon = True  # Thread will terminate when main program exits
+                node.setpoint_thread = threading.Thread(target=setpoint_publisher)
+                node.setpoint_thread.daemon = True
                 node.setpoint_thread.start()
-                node.get_logger().info("Started position control publisher at 10Hz")
-                        
-            return (
-                f"Takeoff sequence initiated successfully!\n\n"
-                f"• Armed: ✓\n"
-                f"• Mode: OFFBOARD\n"
-                f"• Target altitude: {altitude:.1f}m\n\n"
-                f"The drone should now be climbing to the target altitude."
-            )
+                node.get_logger().info("Started setpoint publisher thread")
+            
+            return f"✅ Takeoff successful! Target altitude: {altitude}m\n• Armed: ✓\n• Mode: OFFBOARD\n• Publishing setpoints: ✓"
             
         @tool
         def land() -> str:
             """
-            Command the drone to land at the current location using MAVROS.
+            Land the drone at its current location.
+    
+            Use this tool when the user wants to:
+            - Land the drone
+            - Bring the drone down
+            - Go to the ground
+            - Descend to ground level
+            - Stop flying and land
+            - Return to ground
+            - Touch down
+            - Complete landing sequence
             
-            This will switch the drone to AUTO.LAND mode for a controlled landing sequence.
-            The drone will descend to the ground while maintaining its horizontal position.
+            This function disables position control allowing the drone to descend naturally
+            to the ground. It monitors the landing process until the drone reaches ground
+            level (altitude < 0.2m).
+            
+            The tool automatically handles:
+            - Disabling setpoint publishing 
+            - Monitoring descent progress
+            - Confirming successful touchdown
+            - Providing detailed landing status
             
             Returns:
-                str: Status message about the landing command, or error details if it failed
+                str: Detailed status of the landing process including starting altitude,
+                    final altitude, descent amount, and landing confirmation.
             """
-            node.get_logger().info("Initiating landing sequence...")
+            node.get_logger().info("Initiating complete landing sequence...")
             
-            # Check that mode client exists
-            if not hasattr(node, 'mode_client'):
-                node.mode_client = node.create_client(
-                    SetMode, 
-                    '/drone/mavros/set_mode'
-                )
-                node.get_logger().info("Created mode service client")
+            # 1. Get current position for reference
+            current_x = node.current_pose.pose.position.x
+            current_y = node.current_pose.pose.position.y
+            start_altitude = node.current_pose.pose.position.z
             
-            # Wait for service to be available
-            timeout = 5.0  # seconds
-            if not node.mode_client.wait_for_service(timeout_sec=timeout):
-                return "Set mode service not available. Landing aborted."
+            node.get_logger().info(f"Starting landing from position: ({current_x:.2f}, {current_y:.2f}, {start_altitude:.2f})")
             
-            # Disable setpoint publishing (if active)
+            # 2. Check if we're already on the ground
+            if start_altitude < 0.2:
+                node.get_logger().info("Drone appears to be already on the ground")
+                return f"Drone is already on ground (altitude: {start_altitude:.2f}m)."
+            
+            # 3. DISABLE setpoint publishing to allow natural descent/landing
             if hasattr(node, 'publish_setpoints'):
                 node.publish_setpoints = False
-                node.get_logger().info("Disabled position control for landing")
+                node.get_logger().info("✅ Disabled position control - drone will now descend to ground")
+            else:
+                node.get_logger().warn("No active position control found")
+                return "Warning: No position control was active"
             
-            # Set mode to AUTO.LAND
-            node.get_logger().info("Setting AUTO.LAND mode...")
+            # 4. Brief pause to ensure the change takes effect
+            time.sleep(0.5)
             
-            try:
-                mode_request = SetMode.Request()
-                mode_request.custom_mode = "AUTO.LAND"
-                
-                future = node.mode_client.call_async(mode_request)
-                
-                # Wait for result with timeout
-                start_time = time.time()
-                while time.time() - start_time < timeout and not future.done():
-                    time.sleep(0.1)
-                
-                if not future.done():
-                    return "Set mode request timed out. Landing may not have been initiated."
-                
-                mode_response = future.result()
-                if not mode_response.mode_sent:
-                    return "Failed to set AUTO.LAND mode. Landing may not have been initiated."
-                
-                node.get_logger().info("AUTO.LAND mode set successfully")
-            except Exception as e:
-                node.get_logger().error(f"Setting AUTO.LAND mode failed with error: {str(e)}")
-                return f"Landing failed with error: {str(e)}"
+            # 5. Monitor descent until COMPLETE landing
+            timeout = 45.0  # Allow up to 45 seconds for complete landing
+            start_time = time.time()
+            last_report_time = start_time
+            descent_detected = False
             
-            return (
-                f"Landing sequence initiated successfully!\n\n"
-                f"• Mode: AUTO.LAND\n"
-                f"• The drone should now be descending to land at the current location.\n\n"
-                f"The drone will automatically disarm upon landing."
-            )
+            node.get_logger().info(f"Monitoring landing progress (timeout: {timeout}s)...")
+            
+            while time.time() - start_time < timeout:
+                current_altitude = node.current_pose.pose.position.z
+                elapsed_time = time.time() - start_time
+                
+                # Check if we've actually landed (ground level)
+                if current_altitude < 0.2:
+                    landing_time = elapsed_time
+                    node.get_logger().info(f"🎯 LANDING COMPLETE! Final altitude: {current_altitude:.2f}m (took {landing_time:.1f}s)")
+                    break
+                
+                # Detect if descent has started
+                if not descent_detected and start_altitude - current_altitude > 0.3:
+                    descent_detected = True
+                    node.get_logger().info(f"✅ Descent confirmed - continuing to ground level...")
+                
+                # Report progress every 3 seconds
+                if time.time() - last_report_time > 3.0:
+                    descent_amount = start_altitude - current_altitude
+                    node.get_logger().info(f"Landing progress: {current_altitude:.2f}m (descended {descent_amount:.2f}m)")
+                    last_report_time = time.time()
+                
+                time.sleep(1.0)
+            else:
+                # Timeout occurred - check final state
+                current_altitude = node.current_pose.pose.position.z
+                if current_altitude < 0.2:
+                    node.get_logger().info("Landing completed during timeout check")
+                else:
+                    node.get_logger().warn(f"Landing timeout - drone still at {current_altitude:.2f}m")
+            
+            # 6. Get final position
+            final_altitude = node.current_pose.pose.position.z
+            total_descent = start_altitude - final_altitude
+            
+            # 7. Return comprehensive status report
+            if final_altitude < 0.2:
+                status = (
+                    f"🎯 LANDING SUCCESSFUL!\n\n"
+                    f"• Starting altitude: {start_altitude:.2f}m\n"
+                    f"• Final altitude: {final_altitude:.2f}m\n"
+                    f"• Total descent: {total_descent:.2f}m\n"
+                    f"• Landing position: ({current_x:.2f}, {current_y:.2f})\n"
+                    f"• Position control: DISABLED\n\n"
+                    f"✅ Drone has landed successfully."
+                )
+            elif final_altitude < 1.0:
+                status = (
+                    f"⚠️ PARTIAL LANDING\n\n"
+                    f"• Starting altitude: {start_altitude:.2f}m\n"
+                    f"• Current altitude: {final_altitude:.2f}m\n"
+                    f"• Descent achieved: {total_descent:.2f}m\n"
+                    f"• Position control: DISABLED\n\n"
+                    f"Drone is very low but may not be fully landed. Check visually."
+                )
+            else:
+                status = (
+                    f"❌ LANDING INCOMPLETE\n\n"
+                    f"• Starting altitude: {start_altitude:.2f}m\n"
+                    f"• Current altitude: {final_altitude:.2f}m\n"
+                    f"• Descent achieved: {total_descent:.2f}m\n"
+                    f"• Position control: DISABLED\n\n"
+                    f"Landing may have failed. Drone still airborne at {final_altitude:.2f}m."
+                )
+            
+            return status
         
         # Return the tools
         return [
