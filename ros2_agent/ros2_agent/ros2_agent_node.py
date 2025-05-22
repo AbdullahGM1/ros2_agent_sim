@@ -123,7 +123,7 @@ class Ros2AgentNode(Node):
         
         robot_tools = RobotTools(self)  # Only pass the node itself
         tools = robot_tools.create_tools()
-        
+            
         # Create prompts
         prompts = system_prompts()
         
@@ -136,7 +136,7 @@ class Ros2AgentNode(Node):
         )
         
         self.get_logger().info(f"ROSA Agent initialized with {len(tools)} tools")
-
+        time.sleep(4)
 
 def main(args=None):
     """Main function to run the Drone Agent Node with rich CLI."""

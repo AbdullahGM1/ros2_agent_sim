@@ -7,7 +7,7 @@ This module contains tools for drone control using MAVROS.
 import time
 import threading
 from langchain.agents import tool
-from mavros_msgs.srv import CommandBool, SetMode # type: ignore #
+from mavros_msgs.srv import CommandBool, SetMode # type: ignore
 from geometry_msgs.msg import PoseStamped
 
 
@@ -287,8 +287,61 @@ class RobotTools:
             
             return status
         
+        @tool
+        def get_drone_pose() -> str:
+            """
+            Get the current position and orientation of the drone.
+            
+            Use this tool when the user wants to:
+            - Know the drone's current position
+            - Check where the drone is
+            - Get location information
+            - Check coordinates
+            - See current altitude
+            - Get pose data
+            
+            Returns:
+                str: Current drone position (x, y, z) and orientation information
+            """
+            node.get_logger().info("Getting current drone pose...")
+            
+            # Get current pose from the node
+            current_pose = node.current_pose
+            
+            # Extract position
+            x = current_pose.pose.position.x
+            y = current_pose.pose.position.y
+            z = current_pose.pose.position.z
+            
+            # Extract orientation (quaternion)
+            qx = current_pose.pose.orientation.x
+            qy = current_pose.pose.orientation.y
+            qz = current_pose.pose.orientation.z
+            qw = current_pose.pose.orientation.w
+            
+            # Log the pose information
+            node.get_logger().info(f"Current position: ({x:.2f}, {y:.2f}, {z:.2f})")
+            
+            # Format response
+            pose_info = (
+                f"🚁 Current Drone Pose:\n\n"
+                f"📍 Position:\n"
+                f"  • X: {x:.2f} m\n"
+                f"  • Y: {y:.2f} m\n"
+                f"  • Z (Altitude): {z:.2f} m\n\n"
+                f"🧭 Orientation (Quaternion):\n"
+                f"  • X: {qx:.3f}\n"
+                f"  • Y: {qy:.3f}\n"
+                f"  • Z: {qz:.3f}\n"
+                f"  • W: {qw:.3f}\n\n"
+                f"📊 Status: Data retrieved successfully"
+            )
+            
+            return pose_info
+        
         # Return the tools
         return [
             takeoff,
-            land
+            land,
+            get_drone_pose
         ]
