@@ -16,7 +16,7 @@ from cv_bridge import CvBridge
 import cv2
 
 
-class RobotTools:
+class RobotTools:   
     """Collection of tools for robot control."""
     
     def __init__(self, node):
@@ -442,9 +442,13 @@ class RobotTools:
                 )
             
         @tool
-        def show_camera_feed(action: str = "start") -> str:
+        def camera_feed(action: str = "start") -> str:
             """
             Control camera feed display in a pop-up window for SAR operations.
+            
+            Use this tool when the user wants to:
+            - Start/open/show camera feed: "show camera", "start camera", "open camera feed"
+            - Stop/close camera feed: "close camera", "stop camera", "close camera window"
             
             Args:
                 action: "start" to open camera feed, "stop" to close camera feed
@@ -549,5 +553,5 @@ class RobotTools:
             land,
             get_drone_pose,
             control_gimbal,
-            show_camera_feed
+            camera_feed
         ]
