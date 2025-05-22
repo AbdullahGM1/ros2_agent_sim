@@ -34,7 +34,7 @@ class RobotTools:
             Returns:
                 str: Status message about the takeoff command
             """
-            # 1. Input validation
+            # 1. Input validationa
             if altitude <= 0:
                 return "Error: Altitude must be positive"
             if altitude > 20:
