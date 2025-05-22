@@ -11,6 +11,9 @@ from mavros_msgs.srv import CommandBool, SetMode # type: ignore
 from geometry_msgs.msg import PoseStamped
 import math
 from std_msgs.msg import Float64
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
 
 
 class RobotTools:
@@ -437,11 +440,114 @@ class RobotTools:
                     f"  • Yaw: {yaw:.1f}° ({yaw_rad:.3f} rad)\n\n"
                     f"🎥 Camera should now be positioned for SAR operations."
                 )
+            
+        @tool
+        def show_camera_feed(action: str = "start") -> str:
+            """
+            Control camera feed display in a pop-up window for SAR operations.
+            
+            Args:
+                action: "start" to open camera feed, "stop" to close camera feed
+            
+            Returns:
+                str: Status of camera feed operation
+            """
+            
+            if action.lower() == "start":
+                # Start camera feed
+                node.get_logger().info("Starting SAR camera feed...")
                 
+                # Initialize camera components if needed
+                if not hasattr(node, 'camera_bridge'):
+                    node.camera_bridge = CvBridge()
+                    node.camera_active = False
+                    node.latest_frame = None
+                    
+                # Create camera subscriber if it doesn't exist
+                if not hasattr(node, 'camera_subscriber'):
+                    def camera_callback(msg):
+                        try:
+                            # Convert ROS image to OpenCV
+                            cv_image = node.camera_bridge.imgmsg_to_cv2(msg, "bgr8")
+                            # Resize to fixed 480x480 resolution
+                            resized_image = cv2.resize(cv_image, (480, 480))
+                            node.latest_frame = resized_image
+                        except Exception as e:
+                            node.get_logger().error(f"Camera callback error: {str(e)}")
+                    
+                    node.camera_subscriber = node.create_subscription(
+                        Image, '/drone/gimbal_camera', camera_callback, 10)
+                    node.get_logger().info("Created camera subscriber")
+                
+                # Start camera display thread
+                if not node.camera_active:
+                    node.camera_active = True
+                    
+                    def camera_display_thread():
+                        cv2.namedWindow("SAR Camera Feed", cv2.WINDOW_NORMAL)
+                        cv2.resizeWindow("SAR Camera Feed", 480, 480)
+                        
+                        while node.camera_active and node.running:
+                            if node.latest_frame is not None:
+                                # Add timestamp overlay
+                                frame_with_overlay = node.latest_frame.copy()
+                                timestamp = time.strftime("%H:%M:%S")
+                                cv2.putText(frame_with_overlay, f"SAR CAM {timestamp}", 
+                                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                
+                                cv2.imshow("SAR Camera Feed", frame_with_overlay)
+                            
+                            # Limit frame rate (30 FPS max)
+                            if cv2.waitKey(33) & 0xFF == ord('q'):
+                                break
+                        
+                        cv2.destroyWindow("SAR Camera Feed")
+                    
+                    node.camera_thread = threading.Thread(target=camera_display_thread)
+                    node.camera_thread.daemon = True
+                    node.camera_thread.start()
+                    
+                    return (
+                        f"✅ SAR Camera feed started!\n\n"
+                        f"📺 Window: 480x480 resolution\n"
+                        f"🎥 Live feed from gimbal camera\n"
+                        f"⏱️ Timestamp overlay enabled\n\n"
+                        f"Press 'q' in camera window to close or use 'stop' command."
+                    )
+                else:
+                    return "Camera feed is already active."
+                    
+            elif action.lower() == "stop":
+                # Stop camera feed
+                node.get_logger().info("Stopping SAR camera feed...")
+                
+                if hasattr(node, 'camera_active') and node.camera_active:
+                    node.camera_active = False
+                    
+                    # Wait for thread to finish
+                    if hasattr(node, 'camera_thread') and node.camera_thread.is_alive():
+                        node.camera_thread.join(timeout=2.0)
+                    
+                    # Destroy OpenCV windows
+                    cv2.destroyAllWindows()
+                    
+                    return (
+                        f"✅ SAR Camera feed stopped!\n\n"
+                        f"📺 Camera window closed\n"
+                        f"🎥 Video stream disconnected\n\n"
+                        f"Ready for next camera operation."
+                    )
+                else:
+                    return "No active camera feed to stop."
+            
+            else:
+                return f"Error: Invalid action '{action}'. Use 'start' or 'stop'."
+                        
         # Return the tools
         return [
             takeoff,
             land,
             get_drone_pose,
-            control_gimbal
+            control_gimbal,
+            show_camera_feed
         ]
