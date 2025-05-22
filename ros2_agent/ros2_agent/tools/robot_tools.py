@@ -546,250 +546,314 @@ class RobotTools:
             
             else:
                 return f"Error: Invalid action '{action}'. Use 'start' or 'stop'."
-        @tool
-        def drone_status() -> str:
-            """
-            Get comprehensive drone status including battery, flight state, position, and system health.
+        # @tool
+        # def drone_status() -> str:
+        #     """
+        #     Get comprehensive drone status including battery, flight state, position, and system health.
             
-            Use this tool when the user wants to:
-            - Check overall drone status
-            - Get battery information
-            - Check flight mode and armed status
-            - Get comprehensive system health
-            - Monitor operational readiness
-            - Check all systems at once
+        #     Use this tool when the user wants to:
+        #     - Check overall drone status
+        #     - Get battery information
+        #     - Check flight mode and armed status
+        #     - Get comprehensive system health
+        #     - Monitor operational readiness
+        #     - Check all systems at once
+            
+        #     Returns:
+        #         str: Comprehensive drone status report including battery, flight state, position, and system health
+        #     """
+        #     node.get_logger().info("Getting comprehensive drone status...")
+            
+        #     status_report = []
+        #     status_report.append("🚁 COMPREHENSIVE DRONE STATUS REPORT")
+        #     status_report.append("=" * 50)
+            
+        #     # ====================== BATTERY STATUS ======================
+        #     try:
+        #         # Create battery subscriber if it doesn't exist
+        #         if not hasattr(node, 'battery_data'):
+        #             node.battery_data = None
+                    
+        #             def battery_callback(msg):
+        #                 node.battery_data = msg
+                    
+        #             if not hasattr(node, 'battery_subscriber'):
+        #                 node.battery_subscriber = node.create_subscription(
+        #                     BatteryState, '/drone/mavros/battery', battery_callback, 10)
+        #                 node.get_logger().info("Created battery subscriber")
+                        
+        #                 # Wait briefly for data
+        #                 time.sleep(0.5)
+                
+        #         status_report.append("\n🔋 BATTERY STATUS:")
+        #         if node.battery_data is not None:
+        #             voltage = node.battery_data.voltage
+        #             percentage = node.battery_data.percentage * 100 if node.battery_data.percentage >= 0 else -1
+                    
+        #             # Battery health assessment
+        #             if percentage > 75:
+        #                 battery_health = "🟢 EXCELLENT"
+        #             elif percentage > 50:
+        #                 battery_health = "🟡 GOOD"
+        #             elif percentage > 25:
+        #                 battery_health = "🟠 CAUTION"
+        #             else:
+        #                 battery_health = "🔴 CRITICAL"
+                    
+        #             status_report.append(f"  • Voltage: {voltage:.2f}V")
+        #             if percentage >= 0:
+        #                 status_report.append(f"  • Percentage: {percentage:.1f}%")
+        #                 status_report.append(f"  • Health: {battery_health}")
+        #             else:
+        #                 status_report.append(f"  • Percentage: Unknown")
+        #                 status_report.append(f"  • Health: 🟡 MONITORING")
+        #         else:
+        #             status_report.append("  • Status: ⚠️ Battery data not available")
+                    
+        #     except Exception as e:
+        #         status_report.append(f"  • Error: ❌ Battery status unavailable ({str(e)})")
+            
+        #     # ====================== FLIGHT STATE ======================
+        #     try:
+        #         # Create state subscriber if it doesn't exist
+        #         if not hasattr(node, 'flight_state_data'):
+        #             node.flight_state_data = None
+                    
+        #             def state_callback(msg):
+        #                 node.flight_state_data = msg
+                    
+        #             if not hasattr(node, 'state_subscriber'):
+        #                 node.state_subscriber = node.create_subscription(
+        #                     State, '/drone/mavros/state', state_callback, 10)
+        #                 node.get_logger().info("Created state subscriber")
+                        
+        #                 # Wait briefly for data
+        #                 time.sleep(0.5)
+                
+        #         status_report.append("\n✈️ FLIGHT STATE:")
+        #         if node.flight_state_data is not None:
+        #             armed = "🟢 ARMED" if node.flight_state_data.armed else "🔴 DISARMED"
+        #             connected = "🟢 CONNECTED" if node.flight_state_data.connected else "🔴 DISCONNECTED"
+        #             mode = node.flight_state_data.mode
+                    
+        #             status_report.append(f"  • Armed Status: {armed}")
+        #             status_report.append(f"  • Connection: {connected}")
+        #             status_report.append(f"  • Flight Mode: {mode}")
+        #             status_report.append(f"  • System ID: {node.flight_state_data.system_status}")
+        #         else:
+        #             status_report.append("  • Status: ⚠️ Flight state data not available")
+                    
+        #     except Exception as e:
+        #         status_report.append(f"  • Error: ❌ Flight state unavailable ({str(e)})")
+            
+        #     # ====================== POSITION STATUS ======================
+        #     status_report.append("\n📍 POSITION STATUS:")
+        #     try:
+        #         # Local position (already available from existing subscription)
+        #         current_pose = node.current_pose
+        #         x = current_pose.pose.position.x
+        #         y = current_pose.pose.position.y
+        #         z = current_pose.pose.position.z
+                
+        #         status_report.append(f"  • Local Position:")
+        #         status_report.append(f"    - X: {x:.2f} m")
+        #         status_report.append(f"    - Y: {y:.2f} m")
+        #         status_report.append(f"    - Z (Altitude): {z:.2f} m")
+                
+        #         # GPS position
+        #         if not hasattr(node, 'gps_data'):
+        #             node.gps_data = None
+                    
+        #             def gps_callback(msg):
+        #                 node.gps_data = msg
+                    
+        #             if not hasattr(node, 'gps_subscriber'):
+        #                 from sensor_msgs.msg import NavSatFix
+        #                 node.gps_subscriber = node.create_subscription(
+        #                     NavSatFix, '/drone/mavros/global_position/global', gps_callback, 10)
+        #                 node.get_logger().info("Created GPS subscriber")
+                        
+        #                 # Wait briefly for data
+        #                 time.sleep(0.5)
+                
+        #         if node.gps_data is not None:
+        #             lat = node.gps_data.latitude
+        #             lon = node.gps_data.longitude
+        #             alt = node.gps_data.altitude
+                    
+        #             # GPS fix quality
+        #             if hasattr(node.gps_data, 'status'):
+        #                 gps_quality = "🟢 GOOD FIX" if node.gps_data.status.status >= 0 else "🟡 NO FIX"
+        #             else:
+        #                 gps_quality = "🟡 UNKNOWN"
+                    
+        #             status_report.append(f"  • GPS Position:")
+        #             status_report.append(f"    - Latitude: {lat:.6f}°")
+        #             status_report.append(f"    - Longitude: {lon:.6f}°")
+        #             status_report.append(f"    - GPS Altitude: {alt:.2f} m")
+        #             status_report.append(f"    - GPS Quality: {gps_quality}")
+        #         else:
+        #             status_report.append(f"  • GPS: ⚠️ GPS data not available")
+                    
+        #     except Exception as e:
+        #         status_report.append(f"  • Error: ❌ Position data error ({str(e)})")
+            
+        #     # ====================== FLIGHT PERFORMANCE ======================
+        #     try:
+        #         # Create VFR HUD subscriber if it doesn't exist
+        #         if not hasattr(node, 'vfr_data'):
+        #             node.vfr_data = None
+                    
+        #             def vfr_callback(msg):
+        #                 node.vfr_data = msg
+                    
+        #             if not hasattr(node, 'vfr_subscriber'):
+        #                 node.vfr_subscriber = node.create_subscription(
+        #                     VfrHud, '/drone/mavros/vfr_hud', vfr_callback, 10)
+        #                 node.get_logger().info("Created VFR HUD subscriber")
+                        
+        #                 # Wait briefly for data
+        #                 time.sleep(0.5)
+                
+        #         status_report.append("\n📊 FLIGHT PERFORMANCE:")
+        #         if node.vfr_data is not None:
+        #             airspeed = node.vfr_data.airspeed
+        #             groundspeed = node.vfr_data.groundspeed
+        #             climb = node.vfr_data.climb
+        #             throttle = node.vfr_data.throttle
+                    
+        #             status_report.append(f"  • Airspeed: {airspeed:.1f} m/s")
+        #             status_report.append(f"  • Ground Speed: {groundspeed:.1f} m/s")
+        #             status_report.append(f"  • Climb Rate: {climb:.1f} m/s")
+        #             status_report.append(f"  • Throttle: {throttle:.0f}%")
+        #         else:
+        #             status_report.append("  • Status: ⚠️ Flight performance data not available")
+                    
+        #     except Exception as e:
+        #         status_report.append(f"  • Error: ❌ Performance data error ({str(e)})")
+            
+        #     # ====================== SYSTEM SUMMARY ======================
+        #     status_report.append("\n🎯 OPERATIONAL READINESS:")
+            
+        #     # Determine overall system status
+        #     try:
+        #         ready_for_mission = True
+        #         warnings = []
+                
+        #         # Check battery
+        #         if hasattr(node, 'battery_data') and node.battery_data is not None:
+        #             if hasattr(node.battery_data, 'percentage') and node.battery_data.percentage >= 0:
+        #                 battery_pct = node.battery_data.percentage * 100
+        #                 if battery_pct < 25:
+        #                     ready_for_mission = False
+        #                     warnings.append("🔴 CRITICAL: Low battery")
+        #                 elif battery_pct < 50:
+        #                     warnings.append("🟡 CAUTION: Battery below 50%")
+                
+        #         # Check connection
+        #         if hasattr(node, 'flight_state_data') and node.flight_state_data is not None:
+        #             if not node.flight_state_data.connected:
+        #                 ready_for_mission = False
+        #                 warnings.append("🔴 CRITICAL: Not connected to autopilot")
+                
+        #         # Check position data
+        #         if not hasattr(node, 'current_pose') or node.current_pose is None:
+        #             warnings.append("🟡 CAUTION: Position data may be unreliable")
+                
+        #         # Overall status
+        #         if ready_for_mission and len(warnings) == 0:
+        #             status_report.append("  • Overall Status: 🟢 READY FOR MISSION")
+        #         elif ready_for_mission:
+        #             status_report.append("  • Overall Status: 🟡 OPERATIONAL WITH CAUTIONS")
+        #         else:
+        #             status_report.append("  • Overall Status: 🔴 NOT READY - ISSUES DETECTED")
+                
+        #         # Add warnings
+        #         if warnings:
+        #             status_report.append("  • Warnings:")
+        #             for warning in warnings:
+        #                 status_report.append(f"    - {warning}")
+                        
+        #     except Exception as e:
+        #         status_report.append(f"  • Error: ❌ Cannot determine readiness ({str(e)})")
+                
+        #     # ====================== TIMESTAMP ======================
+        #     from datetime import datetime
+        #     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        #     status_report.append(f"\n⏰ Report generated: {timestamp}")
+        #     status_report.append("=" * 50)
+            
+        #     # Join all status lines
+        #     final_report = "\n".join(status_report)
+            
+        #     # Log the status check
+        #     node.get_logger().info("Comprehensive status check completed")
+            
+        #     return final_report
+        
+        @tool
+        def go_to_position(x: float, y: float, z: float) -> str:
+            """
+            Move the drone to a specific position (x, y, z) in local coordinates.
+            
+            Args:
+                x: Target X position in meters
+                y: Target Y position in meters  
+                z: Target Z position (altitude) in meters
             
             Returns:
-                str: Comprehensive drone status report including battery, flight state, position, and system health
+                str: Status message about the movement command
             """
-            node.get_logger().info("Getting comprehensive drone status...")
+            # Input validation
+            if z <= 0:
+                return "Error: Altitude (z) must be positive"
+            if z > 20:
+                return "Error: Altitude exceeds safe limit (20m max)"
             
-            status_report = []
-            status_report.append("🚁 COMPREHENSIVE DRONE STATUS REPORT")
-            status_report.append("=" * 50)
+            # Get current position
+            current_x = node.current_pose.pose.position.x
+            current_y = node.current_pose.pose.position.y
+            current_z = node.current_pose.pose.position.z
             
-            # ====================== BATTERY STATUS ======================
-            try:
-                # Create battery subscriber if it doesn't exist
-                if not hasattr(node, 'battery_data'):
-                    node.battery_data = None
-                    
-                    def battery_callback(msg):
-                        node.battery_data = msg
-                    
-                    if not hasattr(node, 'battery_subscriber'):
-                        node.battery_subscriber = node.create_subscription(
-                            BatteryState, '/drone/mavros/battery', battery_callback, 10)
-                        node.get_logger().info("Created battery subscriber")
-                        
-                        # Wait briefly for data
-                        time.sleep(0.5)
-                
-                status_report.append("\n🔋 BATTERY STATUS:")
-                if node.battery_data is not None:
-                    voltage = node.battery_data.voltage
-                    percentage = node.battery_data.percentage * 100 if node.battery_data.percentage >= 0 else -1
-                    
-                    # Battery health assessment
-                    if percentage > 75:
-                        battery_health = "🟢 EXCELLENT"
-                    elif percentage > 50:
-                        battery_health = "🟡 GOOD"
-                    elif percentage > 25:
-                        battery_health = "🟠 CAUTION"
-                    else:
-                        battery_health = "🔴 CRITICAL"
-                    
-                    status_report.append(f"  • Voltage: {voltage:.2f}V")
-                    if percentage >= 0:
-                        status_report.append(f"  • Percentage: {percentage:.1f}%")
-                        status_report.append(f"  • Health: {battery_health}")
-                    else:
-                        status_report.append(f"  • Percentage: Unknown")
-                        status_report.append(f"  • Health: 🟡 MONITORING")
-                else:
-                    status_report.append("  • Status: ⚠️ Battery data not available")
-                    
-            except Exception as e:
-                status_report.append(f"  • Error: ❌ Battery status unavailable ({str(e)})")
+            node.get_logger().info(f"Moving from ({current_x:.2f}, {current_y:.2f}, {current_z:.2f}) to ({x:.2f}, {y:.2f}, {z:.2f})")
             
-            # ====================== FLIGHT STATE ======================
-            try:
-                # Create state subscriber if it doesn't exist
-                if not hasattr(node, 'flight_state_data'):
-                    node.flight_state_data = None
-                    
-                    def state_callback(msg):
-                        node.flight_state_data = msg
-                    
-                    if not hasattr(node, 'state_subscriber'):
-                        node.state_subscriber = node.create_subscription(
-                            State, '/drone/mavros/state', state_callback, 10)
-                        node.get_logger().info("Created state subscriber")
-                        
-                        # Wait briefly for data
-                        time.sleep(0.5)
-                
-                status_report.append("\n✈️ FLIGHT STATE:")
-                if node.flight_state_data is not None:
-                    armed = "🟢 ARMED" if node.flight_state_data.armed else "🔴 DISARMED"
-                    connected = "🟢 CONNECTED" if node.flight_state_data.connected else "🔴 DISCONNECTED"
-                    mode = node.flight_state_data.mode
-                    
-                    status_report.append(f"  • Armed Status: {armed}")
-                    status_report.append(f"  • Connection: {connected}")
-                    status_report.append(f"  • Flight Mode: {mode}")
-                    status_report.append(f"  • System ID: {node.flight_state_data.system_status}")
-                else:
-                    status_report.append("  • Status: ⚠️ Flight state data not available")
-                    
-            except Exception as e:
-                status_report.append(f"  • Error: ❌ Flight state unavailable ({str(e)})")
+            # Create setpoint publisher if it doesn't exist
+            if not hasattr(node, 'setpoint_pub'):
+                node.setpoint_pub = node.create_publisher(
+                    PoseStamped,
+                    '/drone/mavros/setpoint_position/local',
+                    10
+                )
+                node.get_logger().info("Created setpoint publisher")
             
-            # ====================== POSITION STATUS ======================
-            status_report.append("\n📍 POSITION STATUS:")
-            try:
-                # Local position (already available from existing subscription)
-                current_pose = node.current_pose
-                x = current_pose.pose.position.x
-                y = current_pose.pose.position.y
-                z = current_pose.pose.position.z
-                
-                status_report.append(f"  • Local Position:")
-                status_report.append(f"    - X: {x:.2f} m")
-                status_report.append(f"    - Y: {y:.2f} m")
-                status_report.append(f"    - Z (Altitude): {z:.2f} m")
-                
-                # GPS position
-                if not hasattr(node, 'gps_data'):
-                    node.gps_data = None
-                    
-                    def gps_callback(msg):
-                        node.gps_data = msg
-                    
-                    if not hasattr(node, 'gps_subscriber'):
-                        from sensor_msgs.msg import NavSatFix
-                        node.gps_subscriber = node.create_subscription(
-                            NavSatFix, '/drone/mavros/global_position/global', gps_callback, 10)
-                        node.get_logger().info("Created GPS subscriber")
-                        
-                        # Wait briefly for data
-                        time.sleep(0.5)
-                
-                if node.gps_data is not None:
-                    lat = node.gps_data.latitude
-                    lon = node.gps_data.longitude
-                    alt = node.gps_data.altitude
-                    
-                    # GPS fix quality
-                    if hasattr(node.gps_data, 'status'):
-                        gps_quality = "🟢 GOOD FIX" if node.gps_data.status.status >= 0 else "🟡 NO FIX"
-                    else:
-                        gps_quality = "🟡 UNKNOWN"
-                    
-                    status_report.append(f"  • GPS Position:")
-                    status_report.append(f"    - Latitude: {lat:.6f}°")
-                    status_report.append(f"    - Longitude: {lon:.6f}°")
-                    status_report.append(f"    - GPS Altitude: {alt:.2f} m")
-                    status_report.append(f"    - GPS Quality: {gps_quality}")
-                else:
-                    status_report.append(f"  • GPS: ⚠️ GPS data not available")
-                    
-            except Exception as e:
-                status_report.append(f"  • Error: ❌ Position data error ({str(e)})")
+            # Create and publish new setpoint
+            setpoint = PoseStamped()
+            setpoint.header.frame_id = "map"
+            setpoint.pose.position.x = x
+            setpoint.pose.position.y = y
+            setpoint.pose.position.z = z
+            setpoint.pose.orientation.w = 1.0
             
-            # ====================== FLIGHT PERFORMANCE ======================
-            try:
-                # Create VFR HUD subscriber if it doesn't exist
-                if not hasattr(node, 'vfr_data'):
-                    node.vfr_data = None
-                    
-                    def vfr_callback(msg):
-                        node.vfr_data = msg
-                    
-                    if not hasattr(node, 'vfr_subscriber'):
-                        node.vfr_subscriber = node.create_subscription(
-                            VfrHud, '/drone/mavros/vfr_hud', vfr_callback, 10)
-                        node.get_logger().info("Created VFR HUD subscriber")
-                        
-                        # Wait briefly for data
-                        time.sleep(0.5)
-                
-                status_report.append("\n📊 FLIGHT PERFORMANCE:")
-                if node.vfr_data is not None:
-                    airspeed = node.vfr_data.airspeed
-                    groundspeed = node.vfr_data.groundspeed
-                    climb = node.vfr_data.climb
-                    throttle = node.vfr_data.throttle
-                    
-                    status_report.append(f"  • Airspeed: {airspeed:.1f} m/s")
-                    status_report.append(f"  • Ground Speed: {groundspeed:.1f} m/s")
-                    status_report.append(f"  • Climb Rate: {climb:.1f} m/s")
-                    status_report.append(f"  • Throttle: {throttle:.0f}%")
-                else:
-                    status_report.append("  • Status: ⚠️ Flight performance data not available")
-                    
-            except Exception as e:
-                status_report.append(f"  • Error: ❌ Performance data error ({str(e)})")
+            # Store setpoint and enable publishing
+            node.target_setpoint = setpoint
+            node.publish_setpoints = True
             
-            # ====================== SYSTEM SUMMARY ======================
-            status_report.append("\n🎯 OPERATIONAL READINESS:")
+            # Start setpoint publisher thread if not running
+            if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
+                def setpoint_publisher():
+                    rate = node.create_rate(10)
+                    while node.running:
+                        if getattr(node, 'publish_setpoints', False) and hasattr(node, 'target_setpoint'):
+                            node.target_setpoint.header.stamp = node.get_clock().now().to_msg()
+                            node.setpoint_pub.publish(node.target_setpoint)
+                        rate.sleep()
+                
+                node.setpoint_thread = threading.Thread(target=setpoint_publisher)
+                node.setpoint_thread.daemon = True
+                node.setpoint_thread.start()
+                node.get_logger().info("Started setpoint publisher thread")
             
-            # Determine overall system status
-            try:
-                ready_for_mission = True
-                warnings = []
-                
-                # Check battery
-                if hasattr(node, 'battery_data') and node.battery_data is not None:
-                    if hasattr(node.battery_data, 'percentage') and node.battery_data.percentage >= 0:
-                        battery_pct = node.battery_data.percentage * 100
-                        if battery_pct < 25:
-                            ready_for_mission = False
-                            warnings.append("🔴 CRITICAL: Low battery")
-                        elif battery_pct < 50:
-                            warnings.append("🟡 CAUTION: Battery below 50%")
-                
-                # Check connection
-                if hasattr(node, 'flight_state_data') and node.flight_state_data is not None:
-                    if not node.flight_state_data.connected:
-                        ready_for_mission = False
-                        warnings.append("🔴 CRITICAL: Not connected to autopilot")
-                
-                # Check position data
-                if not hasattr(node, 'current_pose') or node.current_pose is None:
-                    warnings.append("🟡 CAUTION: Position data may be unreliable")
-                
-                # Overall status
-                if ready_for_mission and len(warnings) == 0:
-                    status_report.append("  • Overall Status: 🟢 READY FOR MISSION")
-                elif ready_for_mission:
-                    status_report.append("  • Overall Status: 🟡 OPERATIONAL WITH CAUTIONS")
-                else:
-                    status_report.append("  • Overall Status: 🔴 NOT READY - ISSUES DETECTED")
-                
-                # Add warnings
-                if warnings:
-                    status_report.append("  • Warnings:")
-                    for warning in warnings:
-                        status_report.append(f"    - {warning}")
-                        
-            except Exception as e:
-                status_report.append(f"  • Error: ❌ Cannot determine readiness ({str(e)})")
-                
-            # ====================== TIMESTAMP ======================
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            status_report.append(f"\n⏰ Report generated: {timestamp}")
-            status_report.append("=" * 50)
-            
-            # Join all status lines
-            final_report = "\n".join(status_report)
-            
-            # Log the status check
-            node.get_logger().info("Comprehensive status check completed")
-            
-            return final_report
+            return f"✅ Moving to position ({x:.2f}, {y:.2f}, {z:.2f})\n• Target set successfully\n• Publishing setpoints: ✓"
                        
         # Return the tools
         return [
@@ -798,5 +862,6 @@ class RobotTools:
             get_drone_pose,
             control_gimbal,
             camera_feed,
-            drone_status
+            # drone_status,
+            go_to_position
         ]
