@@ -8,7 +8,7 @@ import time
 import threading
 from langchain.agents import tool
 from mavros_msgs.srv import CommandBool, SetMode # type: ignore
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped
 
 
 class RobotTools:
@@ -153,13 +153,13 @@ class RobotTools:
             
             # Step 6: Store the current target setpoint on the node
             node.target_setpoint = setpoint
-            
-            # Always ensure setpoint publishing is enabled for takeoff
-            node.publish_setpoints = True
-            node.get_logger().info("Enabled position control for takeoff")
                         
             # Step 7: Start continuous setpoint publishing if not already running
             if not hasattr(node, 'setpoint_thread') or not node.setpoint_thread.is_alive():
+                # Initialize the control flag if it doesn't exist
+                if not hasattr(node, 'publish_setpoints'):
+                    node.publish_setpoints = True
+                
                 def setpoint_publisher_thread():
                     """Thread that publishes position commands at 10Hz to maintain drone control"""
                     rate = node.create_rate(10)  # 10 Hz publication rate
@@ -214,16 +214,10 @@ class RobotTools:
             if not node.mode_client.wait_for_service(timeout_sec=timeout):
                 return "Set mode service not available. Landing aborted."
             
-            # Disable setpoint publishing
-            node.publish_setpoints = False  # Force to False regardless of previous state
-            node.get_logger().info("Disabled position control for landing")
-            
-            # Add a brief pause to ensure the change takes effect
-            time.sleep(0.2)
-            
-            # Verify the flag was set properly (for debugging)
-            node.get_logger().info(f"Position control flag set to: {getattr(node, 'publish_setpoints', False)}")
-
+            # Disable setpoint publishing (if active)
+            if hasattr(node, 'publish_setpoints'):
+                node.publish_setpoints = False
+                node.get_logger().info("Disabled position control for landing")
             
             # Set mode to AUTO.LAND
             node.get_logger().info("Setting AUTO.LAND mode...")
