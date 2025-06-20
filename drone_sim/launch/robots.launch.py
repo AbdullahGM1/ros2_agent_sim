@@ -9,6 +9,7 @@ from launch_ros.substitutions import FindPackageShare
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import PathJoinSubstitution
 from math import radians
+from launch.substitutions import Command, LaunchConfiguration
 
 def generate_launch_description():
     ld = LaunchDescription()
@@ -24,6 +25,18 @@ def generate_launch_description():
     ypos = {'ypos': '0.0'}
     zpos = {'zpos': '0.1'}
     headless = {'headless': '0'}
+
+    # Unitree Go2 Configuration
+    go2_ns = 'go2'
+    
+    # Get Unitree Go2 package paths
+    unitree_go2_description = get_package_share_directory('unitree_go2_description')
+    go2_urdf_path = os.path.join(unitree_go2_description, 'urdf', 'unitree_go2_robot.xacro')
+    
+    # Go2 spawn position (side by side with drone)
+    go2_x = '5.0'
+    go2_y = '0.0' 
+    go2_z = '0.5'  # Slightly elevated to avoid ground collision
 
     # PX4 SITL + Spawn x500_lidar_camera
     gz_launch = IncludeLaunchDescription(
@@ -73,6 +86,34 @@ def generate_launch_description():
             'use_sim_time' : 'True'
 
         }.items()
+    )
+
+    # Unitree Go2 Robot Description
+    go2_robot_description = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='go2_robot_state_publisher',
+        namespace=go2_ns,
+        parameters=[{
+            'robot_description': Command(['xacro ', go2_urdf_path]),
+            'use_sim_time': True
+        }],
+        output='screen'
+    )
+    
+    # Spawn Unitree Go2 in Gazebo
+    go2_spawn = Node(
+        package='ros_gz_sim',
+        executable='create',
+        name='go2_spawn',
+        arguments=[
+            '-name', go2_ns,
+            '-topic', f'/{go2_ns}/robot_description',
+            '-x', go2_x,
+            '-y', go2_y, 
+            '-z', go2_z
+        ],
+        output='screen'
     )
 
     odom_frame = 'odom'
@@ -193,6 +234,9 @@ def generate_launch_description():
     ld.add_action(odom_to_odom_ned_tf_node)
     ld.add_action(ros_gz_bridge)
     ld.add_action(mavros_launch)
+    # Go2 nodes to launch description
+    ld.add_action(go2_robot_description)
+    ld.add_action(go2_spawn)
     ld.add_action(rviz_node)
 
     return ld
