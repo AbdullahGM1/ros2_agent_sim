@@ -4,3 +4,7 @@
 [submodule "gz_ros2_control_humble_garden"]
 	path = gz_ros2_control_humble_garden
 	url = https://github.com/AbdullahGM1/gz_ros2_control_humble_garden.git
+[submodule "src/ros_gz"]
+	path = src/ros_gz
+	url = https://github.com/gazebosim/ros_gz.git
+	branch = humble
