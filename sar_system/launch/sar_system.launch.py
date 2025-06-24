@@ -2,12 +2,11 @@
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, TimerAction, SetEnvironmentVariable
 from launch_ros.actions import Node
-from ament_index_python import get_package_share_directory
 from launch_ros.substitutions import FindPackageShare
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution, Command
+from launch.substitutions import PathJoinSubstitution
 
 def generate_launch_description():
     ld = LaunchDescription()
@@ -16,17 +15,44 @@ def generate_launch_description():
     # SAR SYSTEM PARAMETERS
     # ====================
     
-    # Go2 Robot Configuration
-    go2_ns = 'go2'
+    # Go2 Robot spawn position (away from drone)
     go2_x = '5.0'
     go2_y = '0.0' 
-    go2_z = '0.5'  # Slightly elevated to avoid ground collision
+    go2_z = '0.375'
 
     # ====================
-    # INCLUDE DRONE SYSTEM
+    # SET GAZEBO PLUGIN PATHS FOR gz_ros2_control
     # ====================
     
-    # Include the existing drone simulation
+    # Add your workspace libraries to Gazebo plugin path so PX4 can find gz_ros2_control
+    workspace_path = '/home/user/shared_volume/ros2_ws/install/gz_ros2_control/lib'
+    
+    set_gz_plugin_path = SetEnvironmentVariable(
+        name='GZ_SIM_SYSTEM_PLUGIN_PATH',
+        value=[
+            workspace_path + ':',
+            '/usr/lib/x86_64-linux-gnu/gz-sim-7/plugins:',
+            '/home/user/.gz/sim/plugins'
+        ]
+    )
+    
+    # Set resource path for gz_ros2_control
+    set_gz_resource_path = SetEnvironmentVariable(
+        name='GZ_SIM_RESOURCE_PATH',
+        value='/home/user/shared_volume/ros2_ws/install:' + '/usr/share'
+    )
+    
+    # Suppress TF warnings
+    suppress_warnings = SetEnvironmentVariable(
+        name='RCUTILS_LOGGING_SEVERITY_THRESHOLD',
+        value='ERROR'
+    )
+
+    # ====================
+    # 1. LAUNCH DRONE SYSTEM FIRST
+    # ====================
+    
+    print("🚁 Starting drone system with PX4 Gazebo...")
     drone_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -34,65 +60,84 @@ def generate_launch_description():
                 'launch',  
                 'drone.launch.py'
             ])
-        ])
+        ]),
+        # Add log level arguments to suppress MAVROS TF warnings
+        launch_arguments={
+            'log_level': 'ERROR'
+        }.items()
     )
 
     # ====================
-    # ADD UNITREE GO2 ROBOT
+    # 2. LAUNCH UNITREE GO2 (DELAYED)
     # ====================
     
-    # Get Unitree Go2 package paths
-    unitree_go2_description = get_package_share_directory('unitree_go2_description')
-    go2_urdf_path = os.path.join(unitree_go2_description, 'urdf', 'unitree_go2_robot.xacro')
+    print("🐕 Preparing to launch Go2 robot with ros2_control (delayed)...")
     
-    # Unitree Go2 Robot Description
-    go2_robot_description = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='go2_robot_state_publisher',
-        namespace=go2_ns,
-        parameters=[{
-            'robot_description': Command(['xacro ', go2_urdf_path]),
-            'use_sim_time': True
-        }],
-        output='screen'
+    # Get Unitree config files for manual controller setup
+    unitree_go2_sim = '/home/user/shared_volume/ros2_ws/install/unitree_go2_sim/share/unitree_go2_sim'
+    ros_control_config = unitree_go2_sim + '/config/ros_control/ros_control.yaml'
+    
+    # Start controller manager manually (before Unitree launch)
+    controller_manager_setup = TimerAction(
+        period=12.0,  # After Go2 robot description is ready
+        actions=[
+            Node(
+                package='controller_manager',
+                executable='ros2_control_node',
+                name='controller_manager',
+                output='screen',
+                parameters=[
+                    ros_control_config,
+                    {'use_sim_time': True}
+                ],
+            )
+        ]
     )
     
-    # Spawn Unitree Go2 in Gazebo
-    go2_spawn = Node(
-        package='ros_gz_sim',
-        executable='create',
-        name='go2_spawn',
-        arguments=[
-            '-name', go2_ns,
-            '-topic', f'/{go2_ns}/robot_description',
-            '-x', go2_x,
-            '-y', go2_y, 
-            '-z', go2_z
-        ],
-        output='screen'
+    unitree_launch = TimerAction(
+        period=15.0,  # 15 second delay to ensure PX4 Gazebo is fully ready
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([
+                    PathJoinSubstitution([
+                        FindPackageShare('unitree_go2_sim'),
+                        'launch',  
+                        'unitree_go2_launch.py'
+                    ])
+                ]),
+                launch_arguments={
+                    'world_init_x': go2_x,
+                    'world_init_y': go2_y,
+                    'world_init_z': go2_z,
+                    'robot_name': 'go2',
+                    'rviz': 'false',  # Disable RVIZ to avoid conflicts
+                }.items()
+            )
+        ]
     )
 
     # ====================
-    # SAR SYSTEM TF SETUP
+    # 3. COORDINATION SETUP
     # ====================
     
-    # Go2 to map TF (for coordination)
-    go2_to_map_tf = Node(
+    # Static TF for SAR mission coordination
+    coordination_tf = Node(
         package='tf2_ros',
-        name='go2_to_map_tf_node',
+        name='sar_mission_tf',
         executable='static_transform_publisher',
-        arguments=[go2_x, go2_y, '0.0', '0.0', '0', '0', 'map', f'{go2_ns}/odom'],
+        arguments=['0.0', '0.0', '0.0', '0.0', '0', '0', 'map', 'mission_frame'],
     )
 
     # ====================
     # BUILD LAUNCH DESCRIPTION
     # ====================
     
-    # Add all components to launch description
-    ld.add_action(drone_launch)         # Complete drone system
-    ld.add_action(go2_robot_description) # Go2 robot description
-    ld.add_action(go2_spawn)            # Go2 spawning in Gazebo
-    ld.add_action(go2_to_map_tf)        # Go2 TF coordination
+    ld.add_action(set_gz_plugin_path)    # Set Gazebo plugin paths
+    ld.add_action(set_gz_resource_path)  # Set Gazebo resource paths  
+    ld.add_action(suppress_warnings)     # Suppress TF warnings
+    ld.add_action(drone_launch)          # 1. Drone + PX4 Gazebo
+    ld.add_action(controller_manager_setup)  # 2. Controller manager (delayed)
+    ld.add_action(unitree_launch)        # 3. Go2 (delayed, with ros2_control)
+    ld.add_action(coordination_tf)       # 4. Mission coordination
 
     return ld
