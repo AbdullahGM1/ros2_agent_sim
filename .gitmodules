@@ -1,6 +1,7 @@
 [submodule "unitree_go2_ros2"]
 	path = unitree_go2_ros2
 	url = https://github.com/AbdullahGM1/unitree_go2_ros2.git
-[submodule "gz_ros2_control_humble_garden"]
-	path = gz_ros2_control_humble_garden
-	url = https://github.com/AbdullahGM1/gz_ros2_control_humble_garden.git
+[submodule "gz_ros2_control"]
+	path = gz_ros2_control
+	url = https://github.com/AbdullahGM1/gz_ros2_control.git
+	branch = humble
