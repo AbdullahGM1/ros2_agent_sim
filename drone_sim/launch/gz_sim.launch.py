@@ -76,7 +76,7 @@ def generate_launch_description():
             'cd ',PX4_DIR ,' && ',
             'PX4_SYS_AUTOSTART=', px4_autostart_id,
             ' PX4_GZ_MODEL=', gz_model_name,
-            ' PX4_UXRCE_DDS_NS=',namespace,
+            # ' PX4_UXRCE_DDS_NS=',namespace,
             " PX4_GZ_MODEL_POSE='",xpos,',',ypos,',',zpos,"'",
             ' PX4_GZ_WORLD=', gz_world,
             ' ./build/px4_sitl_default/bin/px4 -i ', instance_id
