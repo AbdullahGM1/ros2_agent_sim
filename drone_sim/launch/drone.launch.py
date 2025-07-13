@@ -34,6 +34,7 @@ def generate_launch_description():
                 'gz_sim.launch.py'
             ])
         ]),
+
         launch_arguments={
             'gz_ns': ns,
             'headless': headless['headless'],
@@ -64,7 +65,7 @@ def generate_launch_description():
         launch_arguments={
             'mavros_namespace' :ns+'/mavros',
             'tgt_system': '2',
-            'fcu_url': 'udp://:14541@127.0.0.1:14558',
+            'fcu_url': 'udp://:14541@127.0.0.1:14557',
             'pluginlists_yaml': plugins_file_path,
             'config_yaml': config_file_path,
             'base_link_frame': 'drone/base_link',
@@ -147,21 +148,27 @@ def generate_launch_description():
         arguments=['0', '0', '0', '1.5708', '0', '3.1415', 'odom', 'odom_ned'],
     )
 
-    # ROS-GZ Bridge
+    # ROS-GZ Bridge - FIXED VERSION for Gazebo Harmonic
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         name='ros_bridge_node',
         executable='parameter_bridge',
         arguments=[
-            '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
-            '/scan@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan',
-            '/scan/points@sensor_msgs/msg/PointCloud2[ignition.msgs.PointCloudPacked',
-            '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image@sensor_msgs/msg/Image[ignition.msgs.Image',
-            '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
-            '/gimbal/cmd_yaw@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/gimbal/cmd_roll@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/gimbal/cmd_pitch@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/imu_gimbal@sensor_msgs/msg/Imu[ignition.msgs.IMU',
+            # ✅ Changed ALL to gz.msgs.* for Gazebo Harmonic
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+            '/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
+            '/scan/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/gimbal/cmd_yaw@std_msgs/msg/Float64]gz.msgs.Double',
+            '/gimbal/cmd_roll@std_msgs/msg/Float64]gz.msgs.Double',
+            '/gimbal/cmd_pitch@std_msgs/msg/Float64]gz.msgs.Double',
+            '/imu_gimbal@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure@sensor_msgs/msg/FluidPressure[gz.msgs.FluidPressure',
+            '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/navsat_sensor/navsat@sensor_msgs/msg/NavSatFix[gz.msgs.NavSat',
+                
+            # Remapping
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image:=' + ns + '/gimbal_camera',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info:=' + ns + '/gimbal_camera_info',
             '--ros-args', '-r', '/gimbal/cmd_yaw:=' + ns + '/gimbal/cmd_yaw',
@@ -169,7 +176,12 @@ def generate_launch_description():
             '--ros-args', '-r', '/gimbal/cmd_pitch:=' + ns + '/gimbal/cmd_pitch',
             '--ros-args', '-r', '/imu_gimbal:=' + ns + '/imu_gimbal',
             '--ros-args', '-r', '/scan:=' + ns + '/scan',
-            '--ros-args', '-r', '/scan/points:=' + ns + '/scan/points'
+            '--ros-args', '-r', '/scan/points:=' + ns + '/scan/points',
+            
+            # Sensors Remapping
+            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu:=' + ns + '/imu',
+            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure:=' + ns + '/air_pressure',
+            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/navsat_sensor/navsat:=' + ns + '/GPS',
         ],
     )
 

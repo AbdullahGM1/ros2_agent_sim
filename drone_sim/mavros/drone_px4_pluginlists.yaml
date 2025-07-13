@@ -37,7 +37,7 @@
       - play_tune
       - camera
       - guided_target
-      - mocap
+      # - mocap
 
 
     # plugin_allowlist:
