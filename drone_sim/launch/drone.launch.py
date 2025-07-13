@@ -181,7 +181,7 @@ def generate_launch_description():
             # Sensors Remapping
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu:=' + ns + '/imu',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure:=' + ns + '/air_pressure',
-            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/navsat_sensor/navsat:=' + ns + '/GPS',
+            '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/navsat_sensor/navsat:=' + ns + '/gps',
         ],
     )
 
