@@ -78,8 +78,8 @@ def generate_launch_description():
         ]),
         launch_arguments={
             'mavros_namespace' :ns+'/mavros',
-            'tgt_system': '1',  # ✅ FIXED: Changed from '2' to '1' to match PX4 instance_id
-            'fcu_url': 'udp://:14541@127.0.0.1:14557',  # ✅ Correct port for instance 1
+            'tgt_system': '2',  
+            'fcu_url': 'udp://:14541@127.0.0.1:14557',  
             'pluginlists_yaml': plugins_file_path,
             'config_yaml': config_file_path,
             'base_link_frame': 'drone/base_link',
