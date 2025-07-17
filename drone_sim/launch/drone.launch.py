@@ -48,7 +48,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # XRCE-DDS Agent - CRITICAL: Bridge between PX4 and ROS2
+    # XRCE-DDS Agent 
     xrce_agent_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -58,7 +58,7 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'port': '8888'  # Default XRCE-DDS port
+            'port': '8888'  
         }.items()
     )
 
