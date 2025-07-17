@@ -25,20 +25,6 @@ def generate_launch_description():
     zpos = {'zpos': '0.1'}
     headless = {'headless': '0'}
 
-    # CRITICAL FIX: Add XRCE-DDS Agent Launch
-    xrce_agent_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('drone_sim'),
-                'launch',  
-                'xrce_agent.launch.py'
-            ])
-        ]),
-        launch_arguments={
-            'port': '8888'
-        }.items()
-    )
-
     # PX4 SITL + Spawn x500_lidar_camera
     gz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -62,7 +48,21 @@ def generate_launch_description():
         }.items()
     )
 
-    # MAVROS
+    # XRCE-DDS Agent - CRITICAL: Bridge between PX4 and ROS2
+    xrce_agent_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('drone_sim'),
+                'launch',  
+                'xrce_agent.launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'port': '8888'  # Default XRCE-DDS port
+        }.items()
+    )
+
+    # MAVROS - FIXED: Corrected system ID to match PX4 instance
     file_name = 'drone_px4_pluginlists.yaml'
     package_share_directory = get_package_share_directory('drone_sim')
     plugins_file_path = os.path.join(package_share_directory,'mavros', file_name)
@@ -78,8 +78,8 @@ def generate_launch_description():
         ]),
         launch_arguments={
             'mavros_namespace' :ns+'/mavros',
-            'tgt_system': '2',
-            'fcu_url': 'udp://:14541@127.0.0.1:14557',
+            'tgt_system': '1',  # ✅ FIXED: Changed from '2' to '1' to match PX4 instance_id
+            'fcu_url': 'udp://:14541@127.0.0.1:14557',  # ✅ Correct port for instance 1
             'pluginlists_yaml': plugins_file_path,
             'config_yaml': config_file_path,
             'base_link_frame': 'drone/base_link',
@@ -209,8 +209,8 @@ def generate_launch_description():
     )
 
     # Add all nodes and launches to the launch description
-    ld.add_action(xrce_agent_launch)  # ✅ CRITICAL FIX: Add XRCE-DDS Agent FIRST
     ld.add_action(gz_launch)
+    ld.add_action(xrce_agent_launch)  # ✅ ADDED: XRCE-DDS Agent
     ld.add_action(map2pose_tf_node)
     ld.add_action(cam_tf_node)
     ld.add_action(lidar_tf_node)
