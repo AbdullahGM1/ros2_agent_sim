@@ -162,13 +162,13 @@ def generate_launch_description():
         arguments=['0', '0', '0', '1.5708', '0', '3.1415', 'odom', 'odom_ned'],
     )
 
-    # ROS-GZ Bridge - FIXED VERSION for Gazebo Harmonic
+     #ROS-GZ Bridge - UPDATED VERSION with Magnetometer
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         name='ros_bridge_node',
         executable='parameter_bridge',
         arguments=[
-            # ✅ Changed ALL to gz.msgs.* for Gazebo Harmonic
+            # Existing topics (unchanged)
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
             '/scan/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
@@ -181,8 +181,14 @@ def generate_launch_description():
             '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure@sensor_msgs/msg/FluidPressure[gz.msgs.FluidPressure',
             '/navsat@sensor_msgs/msg/NavSatFix[gz.msgs.NavSat',
+<<<<<<< HEAD
+=======
+            
+            # ✅ NEW: Magnetometer bridge (if using physical sensor)
+            '/magnetometer@sensor_msgs/msg/MagneticField[gz.msgs.Magnetometer',
+>>>>>>> 7e20eef (Updates)
                 
-            # Remapping
+            # Remapping (existing + new)
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image:=' + ns + '/gimbal_camera',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info:=' + ns + '/gimbal_camera_info',
             '--ros-args', '-r', '/gimbal/cmd_yaw:=' + ns + '/gimbal/cmd_yaw',
@@ -192,10 +198,16 @@ def generate_launch_description():
             '--ros-args', '-r', '/scan:=' + ns + '/scan',
             '--ros-args', '-r', '/scan/points:=' + ns + '/scan/points',
             
-            # Sensors Remapping
+            # Sensors Remapping (existing + new)
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu:=' + ns + '/imu',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure:=' + ns + '/air_pressure',
             '--ros-args', '-r', '/navsat:=' + ns + '/gps',
+<<<<<<< HEAD
+=======
+            
+            # ✅ NEW: Magnetometer remapping (if using physical sensor)
+            '--ros-args', '-r', '/magnetometer:=' + ns + '/magnetometer',
+>>>>>>> 7e20eef (Updates)
 
         ],
     )
