@@ -25,6 +25,20 @@ def generate_launch_description():
     zpos = {'zpos': '0.1'}
     headless = {'headless': '0'}
 
+    # CRITICAL FIX: Add XRCE-DDS Agent Launch
+    xrce_agent_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('drone_sim'),
+                'launch',  
+                'xrce_agent.launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'port': '8888'
+        }.items()
+    )
+
     # PX4 SITL + Spawn x500_lidar_camera
     gz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -195,6 +209,7 @@ def generate_launch_description():
     )
 
     # Add all nodes and launches to the launch description
+    ld.add_action(xrce_agent_launch)  # ✅ CRITICAL FIX: Add XRCE-DDS Agent FIRST
     ld.add_action(gz_launch)
     ld.add_action(map2pose_tf_node)
     ld.add_action(cam_tf_node)
