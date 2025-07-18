@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>gps_bridge</name>
+  <version>1.0.0</version>
+  <description>GPS Bridge Node for PX4 Magnetometer Fix</description>
+  <maintainer email="agm.musalami@gmail.com">AbdullahGm1</maintainer>
+  <license>MIT</license>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>px4_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
