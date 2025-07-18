@@ -48,9 +48,9 @@ private:
         // Publish to PX4
         px4_gps_pub_->publish(px4_gps);
 
-        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-            "GPS: lat=%.6f, lon=%.6f, alt=%.2f", 
-            msg->latitude, msg->longitude, msg->altitude);
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+        //     "GPS: lat=%.6f, lon=%.6f, alt=%.2f", 
+        //     msg->latitude, msg->longitude, msg->altitude);
     }
 
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
