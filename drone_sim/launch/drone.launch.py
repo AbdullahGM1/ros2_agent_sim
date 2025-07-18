@@ -165,15 +165,15 @@ def generate_launch_description():
     # GPS Bridge node - Converts NavSatFix to PX4 SensorGps
     gps_bridge_node = Node(
         package='gps_bridge',
-        executable='gps_bridge_node',  
+        executable='gps_bridge_node', 
         name='gps_bridge',
         output='screen',
         parameters=[
             {'use_sim_time': True},  
         ],
         remappings=[
-            # Maps /fmu/in/sensor_gps → /drone/fmu/in/sensor_gps
-            ('/fmu/in/sensor_gps', '/' + ns + '/fmu/in/sensor_gps'),
+            # Output: Map to namespaced PX4 instance
+            ('/fmu/in/sensor_gps', '/' + ns + '/fmu/in/sensor_gps'),  # Maps to /drone/fmu/in/sensor_gps
         ]
     )
 
