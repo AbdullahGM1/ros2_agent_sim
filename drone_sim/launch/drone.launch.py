@@ -171,10 +171,6 @@ def generate_launch_description():
         parameters=[
             {'use_sim_time': True},  
         ],
-        remappings=[
-            # Output: Map to namespaced PX4 instance
-            ('/fmu/in/sensor_gps', '/' + ns + '/fmu/in/sensor_gps'),  # Maps to /drone/fmu/in/sensor_gps
-        ]
     )
 
     # ROS-GZ Bridge 
