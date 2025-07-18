@@ -1,9 +1,12 @@
+# Check your drone_px4_pluginlists.yaml - GPS should NOT be in the denylist
+
 /drone/mavros/**:
   ros__parameters:
     plugin_denylist:
-      # common
-
-      # extras
+      # ✅ IMPORTANT: Make sure 'global_position' is NOT in this list
+      # ✅ IMPORTANT: Make sure 'gps' is NOT in this list
+      
+      # These should be denylisted (as you have):
       - image_pub
       - vibration
       - distance_sensor
@@ -12,7 +15,7 @@
       - mount_control
       - log_transfer
       - landing_target
-      - gps_rtk
+      - gps_rtk          # ✅ This is OK - RTK GPS (different from basic GPS)
       - manual_control
       - hil
       - adsb
@@ -24,12 +27,12 @@
       - obstacle
       - cellular_status
       - actuator_control
-      - fake_gps
+      - fake_gps         # ✅ This is OK - fake GPS (different from navsat GPS)
       - esc_telemetry
       - mag_calibration
       - px4flow
       - esc_status
-      - gps_input
+      - gps_input        # ✅ This is OK - GPS input (different from navsat GPS)
       - debug_value
       - geofence
       - nav_controller_output
@@ -39,6 +42,4 @@
       - guided_target
       # - mocap
 
-
-    # plugin_allowlist:
-    #   - 'sys_*'
+    # ✅ IMPORTANT: Make sure global_position plugin is enabled (not in denylist above)
