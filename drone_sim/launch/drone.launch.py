@@ -163,6 +163,7 @@ def generate_launch_description():
     )
 
      #ROS-GZ Bridge - UPDATED VERSION with Magnetometer
+    # ROS-GZ Bridge - UPDATED VERSION with Magnetometer
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         name='ros_bridge_node',
@@ -181,12 +182,9 @@ def generate_launch_description():
             '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure@sensor_msgs/msg/FluidPressure[gz.msgs.FluidPressure',
             '/navsat@sensor_msgs/msg/NavSatFix[gz.msgs.NavSat',
-<<<<<<< HEAD
-=======
             
             # ✅ NEW: Magnetometer bridge (if using physical sensor)
             '/magnetometer@sensor_msgs/msg/MagneticField[gz.msgs.Magnetometer',
->>>>>>> 7e20eef (Updates)
                 
             # Remapping (existing + new)
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image:=' + ns + '/gimbal_camera',
@@ -202,12 +200,9 @@ def generate_launch_description():
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu:=' + ns + '/imu',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure:=' + ns + '/air_pressure',
             '--ros-args', '-r', '/navsat:=' + ns + '/gps',
-<<<<<<< HEAD
-=======
             
             # ✅ NEW: Magnetometer remapping (if using physical sensor)
             '--ros-args', '-r', '/magnetometer:=' + ns + '/magnetometer',
->>>>>>> 7e20eef (Updates)
 
         ],
     )
