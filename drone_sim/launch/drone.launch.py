@@ -62,7 +62,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # MAVROS - FIXED: Corrected system ID to match PX4 instance
+    # MAVROS 
     file_name = 'drone_px4_pluginlists.yaml'
     package_share_directory = get_package_share_directory('drone_sim')
     plugins_file_path = os.path.join(package_share_directory,'mavros', file_name)
@@ -162,8 +162,22 @@ def generate_launch_description():
         arguments=['0', '0', '0', '1.5708', '0', '3.1415', 'odom', 'odom_ned'],
     )
 
-     #ROS-GZ Bridge - UPDATED VERSION with Magnetometer
-    # ROS-GZ Bridge - UPDATED VERSION with Magnetometer
+    # GPS Bridge node - Converts NavSatFix to PX4 SensorGps
+    gps_bridge_node = Node(
+        package='gps_bridge',
+        executable='gps_bridge_node',  
+        name='gps_bridge',
+        output='screen',
+        parameters=[
+            {'use_sim_time': True},  
+        ],
+        remappings=[
+            # Maps /fmu/in/sensor_gps → /drone/fmu/in/sensor_gps
+            ('/fmu/in/sensor_gps', '/' + ns + '/fmu/in/sensor_gps'),
+        ]
+    )
+
+    # ROS-GZ Bridge 
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         name='ros_bridge_node',
@@ -183,10 +197,7 @@ def generate_launch_description():
             '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure@sensor_msgs/msg/FluidPressure[gz.msgs.FluidPressure',
             '/navsat@sensor_msgs/msg/NavSatFix[gz.msgs.NavSat',
             
-            # ✅ NEW: Magnetometer bridge (if using physical sensor)
-            '/magnetometer@sensor_msgs/msg/MagneticField[gz.msgs.Magnetometer',
-                
-            # Remapping (existing + new)
+            # Remapping 
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/image:=' + ns + '/gimbal_camera',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/pitch_link/sensor/camera/camera_info:=' + ns + '/gimbal_camera_info',
             '--ros-args', '-r', '/gimbal/cmd_yaw:=' + ns + '/gimbal/cmd_yaw',
@@ -196,14 +207,10 @@ def generate_launch_description():
             '--ros-args', '-r', '/scan:=' + ns + '/scan',
             '--ros-args', '-r', '/scan/points:=' + ns + '/scan/points',
             
-            # Sensors Remapping (existing + new)
+            # Sensors Remapping 
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/imu_sensor/imu:=' + ns + '/imu',
             '--ros-args', '-r', '/world/default/model/x500_lidar_camera_1/link/base_link/sensor/air_pressure_sensor/air_pressure:=' + ns + '/air_pressure',
             '--ros-args', '-r', '/navsat:=' + ns + '/gps',
-            
-            # ✅ NEW: Magnetometer remapping (if using physical sensor)
-            '--ros-args', '-r', '/magnetometer:=' + ns + '/magnetometer',
-
         ],
     )
 
@@ -218,7 +225,7 @@ def generate_launch_description():
 
     # Add all nodes and launches to the launch description
     ld.add_action(gz_launch)
-    ld.add_action(xrce_agent_launch)  # ✅ ADDED: XRCE-DDS Agent
+    ld.add_action(xrce_agent_launch)  
     ld.add_action(map2pose_tf_node)
     ld.add_action(cam_tf_node)
     ld.add_action(lidar_tf_node)
@@ -228,6 +235,7 @@ def generate_launch_description():
     ld.add_action(odom_to_odom_ned_tf_node)
     ld.add_action(ros_gz_bridge)
     ld.add_action(mavros_launch)
+    ld.add_action(gps_bridge_node)
     ld.add_action(rviz_node)
 
     return ld
