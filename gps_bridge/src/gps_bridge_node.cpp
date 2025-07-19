@@ -119,11 +119,11 @@ private:
         px4_gps_pub_->publish(px4_gps);
 
         // Throttled logging for debugging
-        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-            "GPS: lat=%.6f, lon=%.6f, alt=%.2f, vel=[%.1f,%.1f,%.1f] m/s, sats=%d", 
-            px4_gps.latitude_deg, px4_gps.longitude_deg, px4_gps.altitude_msl_m, 
-            px4_gps.vel_n_m_s, px4_gps.vel_e_m_s, px4_gps.vel_d_m_s,
-            px4_gps.satellites_used);
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+        //     "GPS: lat=%.6f, lon=%.6f, alt=%.2f, vel=[%.1f,%.1f,%.1f] m/s, sats=%d", 
+        //     px4_gps.latitude_deg, px4_gps.longitude_deg, px4_gps.altitude_msl_m, 
+        //     px4_gps.vel_n_m_s, px4_gps.vel_e_m_s, px4_gps.vel_d_m_s,
+        //     px4_gps.satellites_used);
     }
 
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
