@@ -16,9 +16,14 @@ public:
                 this->gps_callback(msg);
             });
 
-        // Publish to PX4 
+        // Publish to PX4-compatible QoS:
+        auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
+        qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
+        qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
+        qos.history(rclcpp::HistoryPolicy::KeepLast);
+
         px4_gps_pub_ = this->create_publisher<px4_msgs::msg::SensorGps>(
-            "/fmu/in/sensor_gps", 10);
+            "/drone/fmu/in/sensor_gps", qos);
 
         // Initialize previous position for velocity calculation
         prev_lat_ = 0.0;
