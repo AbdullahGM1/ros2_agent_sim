@@ -33,7 +33,7 @@ public:
         first_msg_ = true;
         msg_count_ = 0;
 
-        RCLCPP_INFO(this->get_logger(), "GPS Bridge started with FIXED velocity calculation!");
+        RCLCPP_INFO(this->get_logger(), "GPS Bridge started with FIXED position and velocity!");
     }
 
 private:
@@ -45,11 +45,26 @@ private:
         auto current_time = this->get_clock()->now();
         px4_gps.timestamp = current_time.nanoseconds() / 1000; // Convert to microseconds
 
-        // GPS position - direct conversion
-        px4_gps.latitude_deg = msg->latitude;
-        px4_gps.longitude_deg = msg->longitude;
-        px4_gps.altitude_msl_m = msg->altitude;
-        px4_gps.altitude_ellipsoid_m = msg->altitude + 30.0f; // Realistic ellipsoid offset
+        // FIXED: Use static position for stable simulation
+        static bool position_set = false;
+        static double fixed_lat = 0.0;
+        static double fixed_lon = 0.0;
+        static double fixed_alt = 0.0;
+
+        if (!position_set) {
+            fixed_lat = msg->latitude;
+            fixed_lon = msg->longitude; 
+            fixed_alt = msg->altitude;
+            position_set = true;
+            RCLCPP_INFO(this->get_logger(), "Fixed GPS position set: lat=%.6f, lon=%.6f, alt=%.2f", 
+                fixed_lat, fixed_lon, fixed_alt);
+        }
+
+        // Use fixed position instead of changing Gazebo GPS
+        px4_gps.latitude_deg = fixed_lat;
+        px4_gps.longitude_deg = fixed_lon;
+        px4_gps.altitude_msl_m = fixed_alt;
+        px4_gps.altitude_ellipsoid_m = fixed_alt + 30.0f; // Realistic ellipsoid offset
 
         // FIXED: Set minimal velocities for stable simulation
         if (!first_msg_ && msg_count_ > 3) {
@@ -76,10 +91,10 @@ private:
             first_msg_ = false;
         }
 
-        // Store current values for next iteration
-        prev_lat_ = msg->latitude;
-        prev_lon_ = msg->longitude;
-        prev_alt_ = msg->altitude;
+        // Store current values for next iteration (using fixed position)
+        prev_lat_ = fixed_lat;
+        prev_lon_ = fixed_lon;
+        prev_alt_ = fixed_alt;
         prev_time_ = current_time;
         msg_count_++;
 
@@ -88,16 +103,16 @@ private:
         px4_gps.satellites_used = 12; // More realistic satellite count
         
         // Better accuracy values (in meters) - typical for good GPS
-        px4_gps.eph = 2.5f;  // Horizontal position accuracy
-        px4_gps.epv = 4.0f;  // Vertical position accuracy
-        px4_gps.hdop = 1.2f; // Horizontal dilution of precision
-        px4_gps.vdop = 1.8f; // Vertical dilution of precision
+        px4_gps.eph = 0.5f;  // IMPROVED: Better horizontal position accuracy
+        px4_gps.epv = 1.0f;  // IMPROVED: Better vertical position accuracy
+        px4_gps.hdop = 0.8f; // IMPROVED: Better horizontal dilution of precision
+        px4_gps.vdop = 1.0f; // IMPROVED: Better vertical dilution of precision
         
         // FIXED: Use only available fields in px4_msgs::msg::SensorGps
         px4_gps.vel_ned_valid = true;
         
         // Additional quality indicators
-        px4_gps.noise_per_ms = 10;  // GPS noise
+        px4_gps.noise_per_ms = 5;  // IMPROVED: Lower GPS noise
         px4_gps.jamming_indicator = 0; // No jamming
 
         // Publish to PX4
@@ -106,7 +121,7 @@ private:
         // Throttled logging for debugging
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
             "GPS: lat=%.6f, lon=%.6f, alt=%.2f, vel=[%.1f,%.1f,%.1f] m/s, sats=%d", 
-            msg->latitude, msg->longitude, msg->altitude, 
+            px4_gps.latitude_deg, px4_gps.longitude_deg, px4_gps.altitude_msl_m, 
             px4_gps.vel_n_m_s, px4_gps.vel_e_m_s, px4_gps.vel_d_m_s,
             px4_gps.satellites_used);
     }
