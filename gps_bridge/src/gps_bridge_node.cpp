@@ -162,10 +162,10 @@ private:
                 px4_gps.cog_rad = atan2(px4_gps.vel_e_m_s, px4_gps.vel_n_m_s);
             } else {
                 // If dt is invalid, zero out velocities to avoid issues
-                px4_gps.vel_n_m_s = 0.0f;
-                px4_gps.vel_e_m_s = 0.0f;
-                px4_gps.vel_d_m_s = 0.0f;
-                px4_gps.vel_m_s = 0.0f;
+                px4_gps.vel_n_m_s = 0.001f;
+                px4_gps.vel_e_m_s = 0.001f;
+                px4_gps.vel_d_m_s = 0.001f;
+                px4_gps.vel_m_s = 0.002f;
                 px4_gps.cog_rad = 0.0f;
                 if (debug_logging_) {
                     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
