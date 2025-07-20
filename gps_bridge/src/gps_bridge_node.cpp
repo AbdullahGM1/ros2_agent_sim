@@ -169,7 +169,7 @@ private:
                 px4_gps.cog_rad = 0.0f;
                 if (debug_logging_) {
                     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                        "Invalid dt for velocity calculation: %.4f seconds. Setting velocities to zero.", dt);
+                        "Invalid dt for velocity calculation: %.4f seconds. Setting velocities to small values.", dt);
                 }
             }
         } else {
