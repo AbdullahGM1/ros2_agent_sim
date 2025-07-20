@@ -174,11 +174,11 @@ private:
             }
         } else {
             // First message - zero velocity
-            px4_gps.vel_n_m_s = 0.0f;
-            px4_gps.vel_e_m_s = 0.0f;
-            px4_gps.vel_d_m_s = 0.0f;
-            px4_gps.vel_m_s = 0.0f;
-            px4_gps.cog_rad = 0.0f;
+            px4_gps.vel_n_m_s = 0.001f;  // 1mm/s instead of 0
+            px4_gps.vel_e_m_s = 0.001f;  // 1mm/s instead of 0  
+            px4_gps.vel_d_m_s = 0.001f;  // 1mm/s instead of 0
+            px4_gps.vel_m_s = 0.002f;    // Small ground speed
+            px4_gps.cog_rad = 0.0f;      // Course over ground can be 0
             first_msg_ = false; // Mark first message processed
         }
     }
