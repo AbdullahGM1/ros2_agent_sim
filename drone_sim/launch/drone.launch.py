@@ -62,6 +62,20 @@ def generate_launch_description():
         }.items()
     )
 
+    # GPS Bridge node - Converts NavSat to PX4 SensorGps
+    gps_bridge_node = Node(
+        package='gps_bridge',
+        executable='gps_bridge_node', 
+        name='gps_bridge',
+        output='screen',
+        parameters=[
+            {'use_sim_time': True},
+            {'gps_device_id': 1},                
+            {'velocity_filter_size': 5},        
+            {'debug_logging': True}             
+        ],
+    )
+
     # MAVROS 
     file_name = 'drone_px4_pluginlists.yaml'
     package_share_directory = get_package_share_directory('drone_sim')
@@ -160,17 +174,6 @@ def generate_launch_description():
         name='odom_to_odom_ned_tf_node',
         executable='static_transform_publisher',
         arguments=['0', '0', '0', '1.5708', '0', '3.1415', 'odom', 'odom_ned'],
-    )
-
-    # GPS Bridge node - Converts NavSatFix to PX4 SensorGps
-    gps_bridge_node = Node(
-        package='gps_bridge',
-        executable='gps_bridge_node', 
-        name='gps_bridge',
-        output='screen',
-        parameters=[
-            {'use_sim_time': True},  
-        ],
     )
 
     # ROS-GZ Bridge 
