@@ -70,7 +70,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'use_sim_time': True},
-            {'gps_device_id': 1310988},                
+            {'gps_device_id': 77777},                
             {'velocity_filter_size': 3},        
             {'debug_logging': True}             
         ],
