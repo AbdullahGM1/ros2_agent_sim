@@ -48,6 +48,20 @@ def generate_launch_description():
         }.items()
     )
 
+    # XRCE-DDS Agent 
+    xrce_agent_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('drone_sim'),
+                'launch',  
+                'xrce_agent.launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'port': '8888'  
+        }.items()
+    )
+
     # MAVROS 
     file_name = 'drone_px4_pluginlists.yaml'
     package_share_directory = get_package_share_directory('drone_sim')
@@ -206,5 +220,6 @@ def generate_launch_description():
     ld.add_action(ros_gz_bridge)
     ld.add_action(mavros_launch)
     ld.add_action(rviz_node)
+    ld.add_action(xrce_agent_launch)
 
     return ld
