@@ -223,7 +223,7 @@ def generate_launch_description():
 
     # Sensor Bridge (IMU, GPS, etc.) - Delayed
     sensor_bridge = TimerAction(
-        period=7.0,  # Wait for LiDAR bridge
+        period=10.0,  # Wait for LiDAR bridge
         actions=[
             Node(
                 package='ros_gz_bridge',
@@ -243,7 +243,10 @@ def generate_launch_description():
                 ],
                 parameters=[
                     {'use_sim_time': True},
-                    {'qos_overrides./drone/imu.reliability': 'best_effort'},
+                    {'qos_overrides./drone/imu.reliability': 'reliable'},
+                    {'qos_overrides./drone/imu.durability': 'volatile'},
+                    {'qos_overrides./drone/imu.history': 'keep_last'},
+                    {'qos_overrides./drone/imu.depth': '1'},
                     {'qos_overrides./drone/gps.reliability': 'best_effort'},
                     {'qos_overrides./drone/air_pressure.reliability': 'best_effort'},
                 ]
